@@ -1,4 +1,9 @@
 outputs/
+__pycache__/
+hsa/__pycache__/
+hsa/adaptation/__pycache_
+hsa/attention/__pycache_
+hsa/initialization/__pycache_
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
