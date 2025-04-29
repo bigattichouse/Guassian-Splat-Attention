@@ -608,7 +608,7 @@ def generate_sample(model, tokenizer, prompt, max_length=100, temperature=0.8):
     return output
 
 # Load TinyStories dataset
-print("Loading TinyStories dataset...")
+print("Loading TinyStoriesInstruct dataset...")
 dataset = load_dataset("roneneldan/TinyStoriesInstruct", split="train")
 
 # Split into train and validation
@@ -977,15 +977,15 @@ try:
                                     "birth_level_threshold": 0.7,  # Birth when below 70% of initial
                                     "min_distance_threshold": 1.5, # Lower distance threshold for births 
                                     "max_regions": 5,              # Allow more regions for birth
-                                    "cpu_efficient": True          # Optimize for CPU
+                                    "cpu_efficient": False          # Optimize for CPU
                                 }
                                 
                                 # Try to call adapt with custom args
                                 try:
-                                    result = hsa.adapt(embeddings, cpu_efficient=True, **custom_args)
+                                    result = hsa.adapt(embeddings, cpu_efficient=False, **custom_args)
                                 except TypeError:
                                     # If it doesn't accept custom args, use standard call
-                                    result = hsa.adapt(embeddings, cpu_efficient=True)
+                                    result = hsa.adapt(embeddings, cpu_efficient=False)
                                     
                                 # More debug info
                                 log_debug(f"After adaptation, splat count: {len(hsa.splat_registry.splats) if hasattr(hsa, 'splat_registry') and hasattr(hsa.splat_registry, 'splats') else 'unknown'}")
