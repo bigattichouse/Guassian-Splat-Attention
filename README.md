@@ -22,7 +22,7 @@ Very little double checking has been done here, but that will also be part of th
 
 ![splat_distribution_1746008929](https://github.com/user-attachments/assets/4e84f99e-4c1f-43dd-a1de-7782620eef85)
 
-Are the visualizations useful?  They did help me tune some features.. but the lowered dimensionality isn't exactly useful in itself other than looking at the output for changes in patterns.  It is pretty though.  
+Are the visualizations useful?  They did help me tune some features.. but the lowered dimensionality isn't exactly useful in itself other than looking at the output for changes in patterns.  It is pretty though.  It tends to form three legs as the attention develops.
 
 ## The AI
 
