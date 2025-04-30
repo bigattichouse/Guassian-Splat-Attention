@@ -21,7 +21,7 @@ I started small and focused on an MVP version of the splatting attention, and as
 Very little double checking has been done here, but that will also be part of the plan - to trim the codebase down while building more and more tests.
 
 ![splat_distribution_1746020281](https://github.com/user-attachments/assets/dae862d3-482b-45f6-8d41-8114cacf81af)
-Are the visualizations useful?  They did help me tune some features.. but the lowered dimensionality isn't exactly useful in itself other than looking at the output for changes in patterns.  It is pretty though.  Did I just realize this image is also a but humorous to me?  Yes, yes I did. 
+Are the visualizations useful?  They did help me tune some features.. but the lowered dimensionality isn't exactly useful in itself other than looking at the output for changes in patterns.  It is pretty though.  Did I just realize this image is also a bit humorous to me?  Yes, yes I did. 
 
 
 ## The AI
