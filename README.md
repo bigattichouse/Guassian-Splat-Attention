@@ -20,6 +20,9 @@ I started small and focused on an MVP version of the splatting attention, and as
 
 Very little double checking has been done here, but that will also be part of the plan - to trim the codebase down while building more and more tests.
 
+![splat_distribution_1746020281](https://github.com/user-attachments/assets/dae862d3-482b-45f6-8d41-8114cacf81af)
+
+
 ## The AI
 
 Below is a summary create by claude to sum up what we've been working on. Yes, I said we. I also say thank you to the AI.
