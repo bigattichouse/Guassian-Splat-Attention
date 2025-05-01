@@ -32,19 +32,34 @@ class Hierarchy:
         self.levels = levels if levels is not None else ["token", "phrase", "sentence", "document"]
         
         # Default initial splats per level if none provided
-        self.init_splats_per_level = init_splats_per_level if init_splats_per_level is not None else [
-            100, 50, 20, 5
-        ]
+        default_splats = [100, 50, 20, 5]
+        if init_splats_per_level is not None:
+            self.init_splats_per_level = init_splats_per_level
+        else:
+            # Use as many defaults as we have levels
+            self.init_splats_per_level = default_splats[:len(self.levels)]
+            # If we need more than we have defaults for, append some reasonable values
+            if len(self.levels) > len(default_splats):
+                for _ in range(len(self.levels) - len(default_splats)):
+                    self.init_splats_per_level.append(5)  # Use a small default
         
-        # Default level weights if none provided (normalized to sum to 1)
+        # Default level weights
+        default_weights = [0.4, 0.3, 0.2, 0.1]
         if level_weights is not None:
+            # Normalize provided weights
             total = sum(level_weights)
             self.level_weights = [w / total for w in level_weights]
         else:
-            # Default to decreasing weights from fine to coarse grained
-            raw_weights = [0.4, 0.3, 0.2, 0.1]
-            total = sum(raw_weights[:len(self.levels)])
-            self.level_weights = [raw_weights[i] / total for i in range(len(self.levels))]
+            # Use as many defaults as we have levels
+            raw_weights = default_weights[:len(self.levels)]
+            # If we need more than we have defaults for, distribute remaining weight equally
+            if len(self.levels) > len(default_weights):
+                remaining = 1.0 - sum(raw_weights)
+                remaining_per_level = remaining / (len(self.levels) - len(default_weights))
+                raw_weights.extend([remaining_per_level] * (len(self.levels) - len(default_weights)))
+            # Normalize weights
+            total = sum(raw_weights)
+            self.level_weights = [w / total for w in raw_weights]
             
         # Validate dimensions match
         if len(self.init_splats_per_level) != len(self.levels):
