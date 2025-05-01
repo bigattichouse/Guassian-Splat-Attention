@@ -297,6 +297,17 @@ class DenseAttentionComputer(AttentionComputer):
             row_sums = np.where(row_sums > 0, row_sums, 1.0)
             attention_matrix = attention_matrix / row_sums
         
+        # Add this code to identify active splats
+        active_splats = []
+        activation_threshold = 0.01  # Threshold for considering a splat active
+        
+        # Check each splat's contribution to attention
+        for splat_id, splat_contribution in splat_contributions.items():
+            max_contribution = np.max(splat_contribution)
+            if max_contribution > activation_threshold:
+                splat = splat_registry.get_splat(splat_id)
+                active_splats.append(splat)
+        
         # Create and return result object
         return AttentionResult(
             attention_matrix=attention_matrix,
