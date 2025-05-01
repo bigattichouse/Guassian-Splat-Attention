@@ -154,7 +154,7 @@ class DenseAttentionComputer(AttentionComputer):
             level_attention = self._compute_level_attention(tokens, level_splats)
             
             # Store in cache for reuse
-            self.level_attention_cache[level] = level_attention
+            self.level_attention_cache[level] = level_attention.copy()
             
             # Normalize level attention if requested
             if self.config.normalize_levels:
@@ -162,15 +162,15 @@ class DenseAttentionComputer(AttentionComputer):
                 if max_val > 0:
                     level_attention = level_attention / max_val
             
-            # Apply causal mask if requested
+            # Apply causal mask if requested - this is essential for test_compute_attention_with_details
             if self.config.causal and causal_mask is not None:
                 level_attention = level_attention * causal_mask
             
             # Apply level weight
-            level_attention *= level_weights[level]
+            weighted_level_attention = level_attention * level_weights[level]
             
             # Add to total attention
-            attention_matrix += level_attention
+            attention_matrix += weighted_level_attention
         
         # Apply top-k sparsity if configured
         if self.config.topk is not None or self.config.threshold is not None:
@@ -182,9 +182,113 @@ class DenseAttentionComputer(AttentionComputer):
         
         # Normalize rows efficiently
         if self.config.normalize_rows:
-            attention_matrix = normalize_rows(attention_matrix)
+            row_sums = np.sum(attention_matrix, axis=1, keepdims=True)
+            # Avoid division by zero
+            row_sums = np.where(row_sums > 0, row_sums, 1.0)
+            attention_matrix = attention_matrix / row_sums
         
         return attention_matrix
+
+    def compute_attention_with_details(
+        self,
+        tokens: np.ndarray,
+        splat_registry: SplatRegistry
+    ) -> AttentionResult:
+        """Compute attention with detailed contributions.
+        
+        Args:
+            tokens: Token embeddings of shape [seq_len, embedding_dim]
+            splat_registry: Registry containing splats to use for attention
+            
+        Returns:
+            AttentionResult with full attention matrix and contribution details
+        """
+        seq_len = tokens.shape[0]
+        
+        # Initialize attention matrix
+        attention_matrix = np.zeros((seq_len, seq_len))
+        
+        # Get hierarchy and level weights
+        hierarchy = splat_registry.hierarchy
+        level_weights = {}
+        
+        if self.config.level_weights:
+            # Use custom weights if provided
+            level_weights = self.config.level_weights
+        else:
+            # Use hierarchy defaults
+            for level in hierarchy.levels:
+                level_weights[level] = hierarchy.get_level_weight(level)
+        
+        # Prepare contribution tracking
+        level_contributions = {}
+        splat_contributions = {}
+        active_splats = []
+        
+        # Compute attention per level - similar to compute_attention but with tracking
+        for level in hierarchy.levels:
+            level_attention = np.zeros((seq_len, seq_len))
+            level_splats = list(splat_registry.get_splats_at_level(level))
+            
+            # Skip empty levels
+            if not level_splats:
+                continue
+            
+            # Compute attention through each splat at this level
+            for splat in level_splats:
+                splat_attention = self.compute_splat_attention_map(tokens, splat)
+                
+                # Store splat contribution
+                splat_contributions[splat.id] = splat_attention
+                
+                # Check if splat is active
+                if np.max(splat_attention) > 0.01:  # Activation threshold
+                    active_splats.append(splat)
+                
+                level_attention += splat_attention
+            
+            # Normalize level attention if requested
+            if self.config.normalize_levels and np.max(level_attention) > 0:
+                level_attention = level_attention / np.max(level_attention)
+            
+            # Apply causal mask if requested
+            if self.config.causal:
+                # Create causal mask (lower triangular)
+                causal_mask = np.tril(np.ones_like(level_attention))
+                # Apply mask - set upper triangle to zero
+                level_attention = level_attention * causal_mask
+            
+            # Store level contribution
+            level_contributions[level] = level_attention.copy()
+            
+            # Apply level weight
+            weighted_level_attention = level_attention * level_weights[level]
+            
+            # Add to total attention
+            attention_matrix += weighted_level_attention
+        
+        # Apply top-k sparsity if configured
+        if self.config.topk is not None or self.config.threshold is not None:
+            attention_matrix = self.apply_topk_sparsity(
+                attention_matrix, 
+                k=self.config.topk, 
+                threshold=self.config.threshold
+            )
+        
+        # Normalize rows if requested
+        if self.config.normalize_rows:
+            row_sums = np.sum(attention_matrix, axis=1, keepdims=True)
+            # Avoid division by zero
+            row_sums = np.where(row_sums > 0, row_sums, 1.0)
+            attention_matrix = attention_matrix / row_sums
+        
+        # Create result object
+        return AttentionResult(
+            attention_matrix=attention_matrix,
+            level_contributions=level_contributions,
+            splat_contributions=splat_contributions,
+            active_splats=active_splats
+        )
     
     def _compute_level_attention(
         self, 

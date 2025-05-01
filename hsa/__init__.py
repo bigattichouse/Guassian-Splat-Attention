@@ -26,6 +26,7 @@ from .adaptation_metrics_base import (
 
 # Import utilities
 from .attention_cache import AttentionCache, cache_attention
+from .attention_utils import apply_causal_mask, normalize_rows, apply_topk_mask
 
 # Package version
 __version__ = "0.1.0"
