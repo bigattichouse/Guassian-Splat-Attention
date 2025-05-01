@@ -316,7 +316,7 @@ class HSA:
         
         # Set a timeout for the adaptation process
         start_time = time.time()
-        max_time = 30  # Maximum seconds for adaptation
+        max_time = 120  # Maximum seconds for adaptation
         
         # For CPU, use simplified metrics calculation
         if cpu_efficient and (current_attention is None or target_attention is None):
