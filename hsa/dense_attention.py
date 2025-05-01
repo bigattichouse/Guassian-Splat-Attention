@@ -184,7 +184,7 @@ class DenseAttentionComputer(AttentionComputer):
         """
         if k is None and threshold is None:
             # If neither is specified, use a default threshold
-            threshold = 0.01
+            threshold = self.config.default_threshold
         
         result = attention_matrix.copy()
         seq_len = attention_matrix.shape[0]

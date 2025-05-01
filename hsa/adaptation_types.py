@@ -117,8 +117,9 @@ class AdaptationConfig:
             mitosis_probability + death_probability + merge_probability + 
             birth_probability + adjust_probability
         )
-        if not 0.99 <= total_prob <= 1.01:
-            raise ValueError(f"Operation probabilities must sum to 1, got {total_prob}")
+        if abs(total_prob - 1.0) > 0.01:
+            raise ValueError(f"Operation probabilities must sum to 1, got {total_prob}")    
+            
         
         # Adaptation cycle settings
         self.adaptation_frequency = adaptation_frequency

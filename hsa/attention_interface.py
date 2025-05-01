@@ -81,6 +81,7 @@ class AttentionConfig:
         level_weights: Optional[Dict[str, float]] = None,
         topk: Optional[int] = None,
         threshold: Optional[float] = None,
+        default_threshold: float = 0.01, 
         normalize_levels: bool = True,
         normalize_rows: bool = True,
         use_sparse: bool = False,
@@ -100,6 +101,7 @@ class AttentionConfig:
         self.level_weights = level_weights
         self.topk = topk
         self.threshold = threshold
+        self.default_threshold = default_threshold
         self.normalize_levels = normalize_levels
         self.normalize_rows = normalize_rows
         self.use_sparse = use_sparse
