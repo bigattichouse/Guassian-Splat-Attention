@@ -7,6 +7,7 @@ registry versions, enabling efficient updates and migrations.
 
 import json
 import logging
+import numpy as np
 from typing import Dict, List, Optional, Any, Tuple
 
 from .splat import Splat
