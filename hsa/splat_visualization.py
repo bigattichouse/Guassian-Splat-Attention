@@ -15,10 +15,6 @@ import logging
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 
-from .splat import Splat
-from .registry import SplatRegistry
-from .adaptation_types import AdaptationType, AdaptationResult
-
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -169,13 +165,13 @@ class SplatVisualizer:
     
     def visualize_registry(
         self,
-        registry: SplatRegistry,
-        tokens: Optional[np.ndarray] = None,
-        highlight_splats: Optional[Set[str]] = None,
-        title: str = "Hierarchical Splat Attention Visualization",
-        show_legend: bool = True,
-        save_path: Optional[str] = None
-    ) -> plt.Figure:
+        registry,
+        tokens=None,
+        highlight_splats=None,
+        title="Hierarchical Splat Attention Visualization",
+        show_legend=True,
+        save_path=None
+    ):
         """Visualize all splats in a registry.
         
         Args:
@@ -216,12 +212,10 @@ class SplatVisualizer:
         if tokens is not None and tokens.shape[0] > 0:
             all_positions = np.vstack([all_positions, tokens])
         
-        # Prepare dimensionality reduction
-        self._prepare_dim_reduction(all_positions)
-        
         # Visualize tokens if provided
         if tokens is not None and tokens.shape[0] > 0:
-            token_positions_2d = self._reduce_dimensions(tokens)
+            # For 2D visualization, use first 2 dimensions
+            token_positions_2d = tokens[:, :2] if tokens.shape[1] > 1 else np.hstack([tokens, np.zeros((tokens.shape[0], 1))])
             ax.scatter(
                 token_positions_2d[:, 0],
                 token_positions_2d[:, 1],
@@ -236,24 +230,19 @@ class SplatVisualizer:
         
         # Draw splats
         for splat in all_splats:
-            # Reduce position dimensionality if needed
-            position_2d = self._reduce_dimensions(splat.position.reshape(1, -1))[0]
+            # For 2D visualization, use first 2 dimensions
+            position_2d = splat.position[:2] if splat.dim > 1 else np.array([splat.position[0], 0])
             
-            # For 2D covariance, we need to project the covariance matrix
-            if splat.dim > 2 and self.dim_reduction_model is not None:
-                if self.dim_reduction == 'pca':
-                    # For PCA, transform covariance using the components
-                    components = self.dim_reduction_model.components_
-                    cov_2d = components @ splat.covariance @ components.T
-                else:
-                    # For other methods, just use identity scaled by trace
-                    cov_2d = np.eye(2) * np.trace(splat.covariance) / splat.dim
-            elif splat.dim == 1:
+            # Extract or create 2x2 covariance matrix
+            if splat.dim == 1:
                 # For 1D, create a diagonal 2x2 matrix
                 cov_2d = np.diag([splat.covariance[0, 0], 0.1])
-            else:
+            elif splat.dim == 2:
                 # Already 2D
                 cov_2d = splat.covariance
+            else:
+                # Use upper-left 2x2 submatrix
+                cov_2d = splat.covariance[:2, :2]
             
             # Get color for this level
             color = self._get_color_for_level(splat.level)
@@ -278,16 +267,23 @@ class SplatVisualizer:
             else:
                 label = None
             
+            # Calculate angle (in degrees)
+            if cov_2d[0, 0] != cov_2d[1, 1]:
+                angle = np.degrees(0.5 * np.arctan2(2 * cov_2d[0, 1], cov_2d[0, 0] - cov_2d[1, 1]))
+            else:
+                angle = 0
+            
             # Draw ellipse
             ellipse = Ellipse(
                 xy=position_2d,
                 width=2 * np.sqrt(cov_2d[0, 0]),
                 height=2 * np.sqrt(cov_2d[1, 1]),
-                angle=np.degrees(0.5 * np.arctan2(2 * cov_2d[0, 1], cov_2d[0, 0] - cov_2d[1, 1])) if cov_2d[0, 0] != cov_2d[1, 1] else 0,
+                angle=angle,
                 facecolor=color,
-                alpha=0.2,
-                edgecolor=color,
-                linewidth=1.5
+                alpha=face_alpha,
+                edgecolor=edge_color,
+                linewidth=edge_width,
+                label=label
             )
             
             ax.add_patch(ellipse)
@@ -300,74 +296,39 @@ class SplatVisualizer:
                 s=30, 
                 zorder=5
             )
-        
-        # Draw tokens with different colors based on their indices
-        colors = plt.cm.tab10(np.linspace(0, 1, len(token_indices)))
-        
-        for i, idx in enumerate(token_indices):
-            ax.scatter(
-                token_positions_2d[idx, 0],
-                token_positions_2d[idx, 1],
-                c=[colors[i]],
-                s=100,
-                marker='o',
-                edgecolors='black',
-                linewidths=1.5,
-                zorder=10,
-                label=f"Token {idx}"
-            )
             
-            # Add token index
-            ax.text(
-                token_positions_2d[idx, 0],
-                token_positions_2d[idx, 1] + 0.1,
-                str(idx),
-                ha='center',
-                va='bottom',
-                fontsize=10,
-                fontweight='bold',
-                bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2')
-            )
+            # Add ID text if highlighted
+            if is_highlighted:
+                ax.text(
+                    position_2d[0], 
+                    position_2d[1] + 0.05, 
+                    splat.id[-6:],  # Show last 6 chars of ID
+                    ha='center', 
+                    va='bottom', 
+                    fontsize=8,
+                    bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2')
+                )
         
-        # Draw attention arrows between tokens
-        max_attention = np.max(attention_matrix)
-        min_line_width = 0.5
-        max_line_width = 3.0
-        
-        for i, src_idx in enumerate(token_indices):
-            for j, tgt_idx in enumerate(token_indices):
-                if src_idx != tgt_idx:
-                    # Get attention value
-                    att_value = attention_matrix[src_idx, tgt_idx]
-                    
-                    # Skip if attention is too low
-                    if att_value < 0.1 * max_attention:
-                        continue
-                    
-                    # Calculate line width based on attention
-                    width = min_line_width + (max_line_width - min_line_width) * (att_value / max_attention)
-                    
-                    # Draw arrow
-                    ax.annotate(
-                        "",
-                        xy=(token_positions_2d[tgt_idx, 0], token_positions_2d[tgt_idx, 1]),
-                        xytext=(token_positions_2d[src_idx, 0], token_positions_2d[src_idx, 1]),
-                        arrowprops=dict(
-                            arrowstyle="->",
-                            color=colors[i],
-                            linewidth=width,
-                            alpha=0.6,
-                            connectionstyle="arc3,rad=0.2"
-                        )
-                    )
-        
-        # Add legend
-        ax.legend(loc='upper right', fontsize=10)
+        # Add legend if requested
+        if show_legend:
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            ax.legend(by_label.values(), by_label.keys(), 
+                     loc='upper right', fontsize=10)
         
         # Set title and labels
         ax.set_title(title)
         ax.set_xlabel('Dimension 1')
         ax.set_ylabel('Dimension 2')
+        
+        # Set limits with some padding
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        padding = 0.1
+        width = xlim[1] - xlim[0]
+        height = ylim[1] - ylim[0]
+        ax.set_xlim(xlim[0] - width * padding, xlim[1] + width * padding)
+        ax.set_ylim(ylim[0] - height * padding, ylim[1] + height * padding)
         
         plt.tight_layout()
         
@@ -379,7 +340,7 @@ class SplatVisualizer:
     
     def visualize_splat_attention_map(
         self,
-        splat: Splat,
+        splat,
         tokens: np.ndarray,
         attention_map: np.ndarray,
         token_indices: Optional[List[int]] = None,
@@ -487,7 +448,7 @@ class SplatVisualizer:
     
     def visualize_3d_splats(
         self,
-        registry: SplatRegistry,
+        registry,
         tokens: Optional[np.ndarray] = None,
         highlight_splats: Optional[Set[str]] = None,
         title: str = "3D Visualization of Hierarchical Splat Attention",
@@ -650,7 +611,7 @@ class SplatVisualizer:
     
     def visualize_hierarchy_levels(
         self,
-        registry: SplatRegistry,
+        registry,
         tokens: Optional[np.ndarray] = None,
         title: str = "Hierarchical Levels of Splat Attention",
         save_path: Optional[str] = None
@@ -807,12 +768,12 @@ class SplatVisualizer:
     
     def visualize_adaptation_metrics(
         self,
-        registry: SplatRegistry,
-        metrics: Dict[str, Any],
-        highlight_top: int = 5,
-        title: str = "Adaptation Metrics Visualization",
-        save_path: Optional[str] = None
-    ) -> plt.Figure:
+        registry,
+        metrics,
+        highlight_top=5,
+        title="Adaptation Metrics Visualization",
+        save_path=None
+    ):
         """Visualize adaptation metrics for splats.
         
         Args:
@@ -869,7 +830,7 @@ class SplatVisualizer:
             # Skip if no values
             if not values:
                 ax.text(0.5, 0.5, f"No data for metric: {metric_name}", 
-                        ha='center', va='center', transform=ax.transAxes)
+                       ha='center', va='center', transform=ax.transAxes)
                 ax.set_title(metric_name.replace('_', ' ').title())
                 continue
             
@@ -939,70 +900,11 @@ class SplatVisualizer:
             plt.savefig(save_path, dpi=150, bbox_inches='tight')
         
         return fig
-.5 * np.arctan2(2 * cov_2d[0, 1], cov_2d[0, 0] - cov_2d[1, 1])) if cov_2d[0, 0] != cov_2d[1, 1] else 0,
-                facecolor=color,
-                alpha=face_alpha,
-                edgecolor=edge_color,
-                linewidth=edge_width,
-                label=label
-            )
-            
-            ax.add_patch(ellipse)
-            
-            # Add center point
-            ax.scatter(
-                position_2d[0], 
-                position_2d[1], 
-                c=color, 
-                s=30, 
-                zorder=5
-            )
-            
-            # Add ID text if highlighted
-            if is_highlighted:
-                ax.text(
-                    position_2d[0], 
-                    position_2d[1] + 0.05, 
-                    splat.id[-6:],  # Show last 6 chars of ID
-                    ha='center', 
-                    va='bottom', 
-                    fontsize=8,
-                    bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2')
-                )
-        
-        # Add legend if requested
-        if show_legend:
-            handles, labels = ax.get_legend_handles_labels()
-            by_label = dict(zip(labels, handles))
-            ax.legend(by_label.values(), by_label.keys(), 
-                     loc='upper right', fontsize=10)
-        
-        # Set title and labels
-        ax.set_title(title)
-        ax.set_xlabel('Dimension 1')
-        ax.set_ylabel('Dimension 2')
-        
-        # Set limits with some padding
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
-        padding = 0.1
-        width = xlim[1] - xlim[0]
-        height = ylim[1] - ylim[0]
-        ax.set_xlim(xlim[0] - width * padding, xlim[1] + width * padding)
-        ax.set_ylim(ylim[0] - height * padding, ylim[1] + height * padding)
-        
-        plt.tight_layout()
-        
-        # Save if requested
-        if save_path:
-            plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        
-        return fig
     
     def visualize_adaptation_operation(
         self,
-        result: AdaptationResult,
-        registry: SplatRegistry,
+        result,
+        registry,
         tokens: Optional[np.ndarray] = None,
         save_path: Optional[str] = None
     ) -> plt.Figure:
@@ -1020,19 +922,19 @@ class SplatVisualizer:
         adaptation_type = result.adaptation_type
         
         # Set title based on adaptation type
-        if adaptation_type == AdaptationType.MITOSIS:
+        if adaptation_type.name == "MITOSIS":
             title = f"Mitosis Operation: {result.original_splat_id} → {', '.join(result.new_splat_ids)}"
             highlight_splats = set(result.new_splat_ids)
-        elif adaptation_type == AdaptationType.BIRTH:
+        elif adaptation_type.name == "BIRTH":
             title = f"Birth Operation: Created {', '.join(result.new_splat_ids)}"
             highlight_splats = set(result.new_splat_ids)
-        elif adaptation_type == AdaptationType.DEATH:
+        elif adaptation_type.name == "DEATH":
             title = f"Death Operation: Removed {result.original_splat_id}"
             highlight_splats = set()  # Nothing to highlight
-        elif adaptation_type == AdaptationType.MERGE:
+        elif adaptation_type.name == "MERGE":
             title = f"Merge Operation: {result.original_splat_id} + {result.removed_splat_ids[1] if len(result.removed_splat_ids) > 1 else '?'} → {', '.join(result.new_splat_ids)}"
             highlight_splats = set(result.new_splat_ids)
-        elif adaptation_type == AdaptationType.ADJUST:
+        elif adaptation_type.name == "ADJUST":
             title = f"Adjust Operation: Updated {result.original_splat_id}"
             highlight_splats = {result.original_splat_id}
         else:
@@ -1053,8 +955,8 @@ class SplatVisualizer:
     
     def visualize_adaptation_history(
         self,
-        history: List[AdaptationResult],
-        registry: SplatRegistry,
+        history,
+        registry,
         tokens: Optional[np.ndarray] = None,
         save_path: Optional[str] = None
     ) -> plt.Figure:
@@ -1100,12 +1002,12 @@ class SplatVisualizer:
     
     def create_adaptation_animation(
         self,
-        registry_states: List[SplatRegistry],
-        adaptation_results: List[AdaptationResult],
+        registry_states,
+        adaptation_results,
         tokens: Optional[np.ndarray] = None,
         save_path: Optional[str] = None,
         fps: int = 2
-    ) -> animation.FuncAnimation:
+    ):
         """Create an animation of adaptation operations.
         
         Args:
@@ -1149,19 +1051,19 @@ class SplatVisualizer:
             
             # Set title based on adaptation type
             if result:
-                if result.adaptation_type == AdaptationType.MITOSIS:
+                if result.adaptation_type.name == "MITOSIS":
                     title = f"Frame {frame}: Mitosis - {result.original_splat_id} → {', '.join(result.new_splat_ids)}"
                     highlight_splats = set(result.new_splat_ids)
-                elif result.adaptation_type == AdaptationType.BIRTH:
+                elif result.adaptation_type.name == "BIRTH":
                     title = f"Frame {frame}: Birth - Created {', '.join(result.new_splat_ids)}"
                     highlight_splats = set(result.new_splat_ids)
-                elif result.adaptation_type == AdaptationType.DEATH:
+                elif result.adaptation_type.name == "DEATH":
                     title = f"Frame {frame}: Death - Removed {result.original_splat_id}"
                     highlight_splats = set()
-                elif result.adaptation_type == AdaptationType.MERGE:
+                elif result.adaptation_type.name == "MERGE":
                     title = f"Frame {frame}: Merge - Combined splats into {', '.join(result.new_splat_ids)}"
                     highlight_splats = set(result.new_splat_ids)
-                elif result.adaptation_type == AdaptationType.ADJUST:
+                elif result.adaptation_type.name == "ADJUST":
                     title = f"Frame {frame}: Adjust - Updated {result.original_splat_id}"
                     highlight_splats = {result.original_splat_id}
                 else:
@@ -1301,13 +1203,13 @@ class SplatVisualizer:
     
     def visualize_attention_flow(
         self,
-        registry: SplatRegistry,
-        attention_matrix: np.ndarray,
-        tokens: np.ndarray,
-        token_indices: Optional[List[int]] = None,
-        title: str = "Attention Flow through Splats",
-        save_path: Optional[str] = None
-    ) -> plt.Figure:
+        registry,
+        attention_matrix,
+        tokens,
+        token_indices=None,
+        title="Attention Flow through Splats",
+        save_path=None
+    ):
         """Visualize attention flow through splats for specific token pairs.
         
         Args:
@@ -1342,15 +1244,11 @@ class SplatVisualizer:
                 
             return fig
         
-        # Extract positions for dimensionality reduction
-        all_positions = np.stack([splat.position for splat in all_splats])
-        all_positions = np.vstack([all_positions, tokens])
-        
-        # Prepare dimensionality reduction
-        self._prepare_dim_reduction(all_positions)
-        
-        # Reduce dimensions of all token positions
-        token_positions_2d = self._reduce_dimensions(tokens)
+        # For 2D visualization, use first 2 dimensions for all positions
+        if tokens.shape[1] > 2:
+            token_positions_2d = tokens[:, :2]
+        else:
+            token_positions_2d = tokens
         
         # Select token indices if not provided
         if token_indices is None:
@@ -1394,31 +1292,124 @@ class SplatVisualizer:
         
         # Draw splats
         for splat in all_splats:
-            # Reduce position dimensionality if needed
-            position_2d = self._reduce_dimensions(splat.position.reshape(1, -1))[0]
+            # Use first 2 dimensions
+            position_2d = splat.position[:2] if splat.dim > 1 else np.array([splat.position[0], 0])
             
-            # For 2D covariance, we need to project the covariance matrix
-            if splat.dim > 2 and self.dim_reduction_model is not None:
-                if self.dim_reduction == 'pca':
-                    # For PCA, transform covariance using the components
-                    components = self.dim_reduction_model.components_
-                    cov_2d = components @ splat.covariance @ components.T
-                else:
-                    # For other methods, just use identity scaled by trace
-                    cov_2d = np.eye(2) * np.trace(splat.covariance) / splat.dim
-            elif splat.dim == 1:
-                # For 1D, create a diagonal 2x2 matrix
+            # Extract or create 2x2 covariance matrix
+            if splat.dim == 1:
                 cov_2d = np.diag([splat.covariance[0, 0], 0.1])
-            else:
-                # Already 2D
+            elif splat.dim == 2:
                 cov_2d = splat.covariance
+            else:
+                cov_2d = splat.covariance[:2, :2]
             
             # Get color for this level
             color = self._get_color_for_level(splat.level)
             
             # Draw ellipse
+            width = 2 * np.sqrt(cov_2d[0, 0])
+            height = 2 * np.sqrt(cov_2d[1, 1])
+            
+            # Calculate angle - carefully handling potential division by zero
+            if cov_2d[0, 0] != cov_2d[1, 1]:
+                angle = np.degrees(0.5 * np.arctan2(2 * cov_2d[0, 1], cov_2d[0, 0] - cov_2d[1, 1]))
+            else:
+                angle = 0
+            
             ellipse = Ellipse(
                 xy=position_2d,
-                width=2 * np.sqrt(cov_2d[0, 0]),
-                height=2 * np.sqrt(cov_2d[1, 1]),
-                angle=np.degrees(0
+                width=width,
+                height=height,
+                angle=angle,
+                facecolor=color,
+                alpha=0.2,
+                edgecolor=color,
+                linewidth=1.5
+            )
+            
+            ax.add_patch(ellipse)
+            
+            # Add center point
+            ax.scatter(
+                position_2d[0], 
+                position_2d[1], 
+                c=color, 
+                s=30, 
+                zorder=5
+            )
+        
+        # Draw tokens with different colors based on their indices
+        colors = plt.cm.tab10(np.linspace(0, 1, len(token_indices)))
+        
+        for i, idx in enumerate(token_indices):
+            ax.scatter(
+                token_positions_2d[idx, 0],
+                token_positions_2d[idx, 1],
+                c=[colors[i]],
+                s=100,
+                marker='o',
+                edgecolors='black',
+                linewidths=1.5,
+                zorder=10,
+                label=f"Token {idx}"
+            )
+            
+            # Add token index
+            ax.text(
+                token_positions_2d[idx, 0],
+                token_positions_2d[idx, 1] + 0.1,
+                str(idx),
+                ha='center',
+                va='bottom',
+                fontsize=10,
+                fontweight='bold',
+                bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2')
+            )
+        
+        # Draw attention arrows between tokens
+        max_attention = np.max(attention_matrix)
+        min_line_width = 0.5
+        max_line_width = 3.0
+        
+        for i, src_idx in enumerate(token_indices):
+            for j, tgt_idx in enumerate(token_indices):
+                if src_idx != tgt_idx:
+                    # Get attention value
+                    att_value = attention_matrix[src_idx, tgt_idx]
+                    
+                    # Skip if attention is too low
+                    if att_value < 0.1 * max_attention:
+                        continue
+                    
+                    # Calculate line width based on attention
+                    width = min_line_width + (max_line_width - min_line_width) * (att_value / max_attention)
+                    
+                    # Draw arrow
+                    ax.annotate(
+                        "",
+                        xy=(token_positions_2d[tgt_idx, 0], token_positions_2d[tgt_idx, 1]),
+                        xytext=(token_positions_2d[src_idx, 0], token_positions_2d[src_idx, 1]),
+                        arrowprops=dict(
+                            arrowstyle="->",
+                            color=colors[i],
+                            linewidth=width,
+                            alpha=0.6,
+                            connectionstyle="arc3,rad=0.2"
+                        )
+                    )
+        
+        # Add legend
+        ax.legend(loc='upper right', fontsize=10)
+        
+        # Set title and labels
+        ax.set_title(title)
+        ax.set_xlabel('Dimension 1')
+        ax.set_ylabel('Dimension 2')
+        
+        plt.tight_layout()
+        
+        # Save if requested
+        if save_path:
+            plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        
+        return fig
