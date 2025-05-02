@@ -113,6 +113,9 @@ class HSASerializer:
             
         Returns:
             True if compatible, False otherwise
+            
+        Raises:
+            ValueError: If versions are incompatible
         """
         if version == self.VERSION:
             return True
@@ -122,18 +125,32 @@ class HSASerializer:
             ver_parts = list(map(int, version.split('.')))
             current_parts = list(map(int, self.VERSION.split('.')))
             
-            # Check major version
+            # Check major version - must match
             if ver_parts[0] != current_parts[0]:
-                return False
+                raise ValueError(
+                    f"Incompatible major version: {version} vs {self.VERSION}. " +
+                    "Cannot convert between different major versions."
+                )
                 
-            # Minor version can be lower
+            # Minor version can be lower but not higher
             if ver_parts[1] > current_parts[1]:
-                return False
+                raise ValueError(
+                    f"Incompatible minor version: {version} vs {self.VERSION}. " +
+                    "Cannot load data from newer minor versions."
+                )
+                
+            # If we get here, versions are compatible
+            if ver_parts[1] < current_parts[1] or ver_parts[2] < current_parts[2]:
+                logger.info(f"Loading data from older version: {version} with serializer version {self.VERSION}")
                 
             return True
-        except:
-            # If parsing fails, assume incompatible
-            return False
+        except (ValueError, IndexError) as e:
+            if isinstance(e, ValueError) and "Incompatible" in str(e):
+                # Re-raise our custom error
+                raise
+            
+            # If parsing fails, raise incompatible version error
+            raise ValueError(f"Invalid version format: {version}")
     
     def _registry_to_dict(self, registry: SplatRegistry) -> Dict[str, Any]:
         """Convert a registry to a dictionary for serialization.

@@ -95,20 +95,33 @@ class SplatRegistry:
         
         splat_obj = self.splats[splat_id]
         
-        # Remove parent-child relationships
-        if splat_obj.parent is not None:
+        # Store parent reference before modifying relationships
+        parent = splat_obj.parent
+        
+        # First handle all children
+        if splat_obj.children:
+            children = list(splat_obj.children)  # Make a copy to avoid modification during iteration
+            
+            for child in children:
+                # Update child's parent reference
+                if parent is not None:
+                    # Move child to grandparent
+                    child.parent = parent
+                    parent.children.add(child)
+                else:
+                    # If no grandparent, child becomes orphaned
+                    child.parent = None
+                    
+                # Remove child from this splat's children
+                splat_obj.children.remove(child)
+        
+        # Now handle parent relationship
+        if parent is not None:
             try:
-                splat_obj.parent.children.remove(splat_obj)
+                parent.children.remove(splat_obj)
             except KeyError:
                 logger.warning(f"Splat {splat_id} not found in parent's children set")
                 self.recovery_count += 1
-        
-        # Move children to parent if any
-        if splat_obj.parent is not None and splat_obj.children:
-            for child in list(splat_obj.children):
-                child.parent = splat_obj.parent
-                splat_obj.parent.children.add(child)
-                splat_obj.children.remove(child)
         
         # Remove splat from registry
         try:
@@ -506,8 +519,21 @@ class SplatRegistry:
         """
         repairs = 0
         
+        # Ensure all levels defined in hierarchy exist in splats_by_level
+        for level in self.hierarchy.levels:
+            if level not in self.splats_by_level:
+                self.splats_by_level[level] = set()
+                logger.info(f"Created missing level set for {level}")
+                repairs += 1
+        
         # Repair splats missing from their level sets
         for splat_id, splat in self.splats.items():
+            if splat.level not in self.splats_by_level:
+                # Create the missing level set
+                self.splats_by_level[splat.level] = set()
+                logger.info(f"Created missing level set for {splat.level}")
+                repairs += 1
+                
             if splat not in self.splats_by_level[splat.level]:
                 self.splats_by_level[splat.level].add(splat)
                 logger.info(f"Added splat {splat_id} to its level set {splat.level}")

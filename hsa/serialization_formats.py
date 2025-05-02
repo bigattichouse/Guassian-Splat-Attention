@@ -200,25 +200,57 @@ def clone_registry(registry: SplatRegistry) -> SplatRegistry:
     new_registry.unregistered_count = registry.unregistered_count
     new_registry.recovery_count = registry.recovery_count
     
-    # Copy all splats without relationships
+    # Step 1: Create all splats first without relationships
     splats_by_id = {}
-    for splat in registry.get_all_splats():
-        new_splat = splat.clone()
-        new_registry.register(new_splat)
-        splats_by_id[splat.id] = new_splat
+    original_to_new = {}  # Map from original ID to new splat object
     
-    # Restore relationships
-    for splat in registry.get_all_splats():
-        new_splat = splats_by_id[splat.id]
+    for original_splat in registry.get_all_splats():
+        new_splat = Splat(
+            dim=original_splat.dim,
+            position=original_splat.position.copy(),
+            covariance=original_splat.covariance.copy(),
+            amplitude=original_splat.amplitude,
+            level=original_splat.level,
+            id=original_splat.id  # Keep the same ID
+        )
         
-        # Set parent
-        if splat.parent and splat.parent.id in splats_by_id:
-            new_splat.parent = splats_by_id[splat.parent.id]
+        # Copy other properties
+        new_splat.lifetime = original_splat.lifetime
+        new_splat.info_contribution = original_splat.info_contribution
         
-        # Set children
-        for child in splat.children:
-            if child.id in splats_by_id:
-                new_splat.children.add(splats_by_id[child.id])
+        # Copy activation history
+        for value in original_splat.activation_history.get_values():
+            new_splat.activation_history.add(value)
+        
+        # Add to registry
+        new_registry.register(new_splat)
+        
+        # Store mapping for relationship restoration
+        splats_by_id[new_splat.id] = new_splat
+        original_to_new[original_splat.id] = new_splat
+    
+    # Step 2: Restore relationships
+    for original_splat in registry.get_all_splats():
+        new_splat = original_to_new[original_splat.id]
+        
+        # Restore parent
+        if original_splat.parent is not None:
+            parent_id = original_splat.parent.id
+            if parent_id in splats_by_id:
+                new_splat.parent = splats_by_id[parent_id]
+                # Also add this splat to parent's children
+                new_splat.parent.children.add(new_splat)
+        
+        # Restore children
+        for original_child in original_splat.children:
+            child_id = original_child.id
+            if child_id in splats_by_id:
+                # Note: We don't need to set child.parent here as that was handled
+                # when processing the child's parent relationship above
+                new_splat.children.add(splats_by_id[child_id])
+    
+    # Fix any remaining inconsistencies
+    new_registry.repair_integrity()
     
     return new_registry
 
