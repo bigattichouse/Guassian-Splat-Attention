@@ -73,12 +73,28 @@ def compute_registry_delta(
             amplitude_changed = old_splat.amplitude != new_splat.amplitude
             level_changed = old_splat.level != new_splat.level
             
-            # Only check these direct attribute changes to determine if a splat is modified
-            # Relationship changes (parent/children) are handled separately during application
-            if position_changed or covariance_changed or amplitude_changed or level_changed:
+            # Check for relationship changes
+            parent_changed = (
+                (old_splat.parent is None and new_splat.parent is not None) or
+                (old_splat.parent is not None and new_splat.parent is None) or
+                (old_splat.parent is not None and new_splat.parent is not None and 
+                 old_splat.parent.id != new_splat.parent.id)
+            )
+            
+            # Check for activation history changes
+            old_history = old_splat.activation_history.get_values()
+            new_history = new_splat.activation_history.get_values()
+            history_changed = len(old_history) != len(new_history) or not all(
+                old == new for old, new in zip(old_history, new_history)
+            )
+            
+            # If any changes detected, add to modified splats
+            if (position_changed or covariance_changed or amplitude_changed or 
+                level_changed or parent_changed or history_changed):
                 delta["modified_splats"].append(splat_to_dict(serializer, new_splat))
     
     return delta
+    
 
 def splat_to_dict(serializer: HSASerializer, splat: Splat) -> Dict[str, Any]:
     """Convert a splat to a dictionary.
@@ -90,6 +106,9 @@ def splat_to_dict(serializer: HSASerializer, splat: Splat) -> Dict[str, Any]:
     Returns:
         Dictionary representation
     """
+    # Get activation history values
+    activation_history = splat.activation_history.get_values()
+    
     return {
         "id": splat.id,
         "level": splat.level,
@@ -98,11 +117,10 @@ def splat_to_dict(serializer: HSASerializer, splat: Splat) -> Dict[str, Any]:
         "amplitude": splat.amplitude,
         "lifetime": splat.lifetime,
         "info_contribution": splat.info_contribution,
-        "activation_history": splat.activation_history.get_values(),
+        "activation_history": activation_history,  # Make sure this is a list of values
         "parent_id": splat.parent.id if splat.parent else None,
         "children_ids": [child.id for child in splat.children]
     }
-
 
 def apply_delta(
     serializer: HSASerializer,
@@ -119,9 +137,6 @@ def apply_delta(
     Returns:
         Updated SplatRegistry
     """
-    # Import numpy here to avoid circular imports
-    import numpy as np
-    
     # Create a copy of the base registry
     registry = clone_registry(base_registry)
     
@@ -136,9 +151,10 @@ def apply_delta(
         except ValueError:
             logger.warning(f"Failed to remove splat {splat_id}: not found")
     
-    # Add new splats (first pass without setting relationships)
+    # First pass: Create or update splats without setting relationships
     splats_by_id = {splat.id: splat for splat in registry.get_all_splats()}
     
+    # Add new splats (first pass without relationships)
     for splat_data in delta.get("added_splats", []):
         position = serializer._deserialize_array(splat_data["position"])
         covariance = serializer._deserialize_array(splat_data["covariance"])
@@ -160,7 +176,7 @@ def apply_delta(
             splat.info_contribution = splat_data["info_contribution"]
         
         if "activation_history" in splat_data:
-            # Make sure to clear any existing history
+            # Make sure to clear any existing history first
             splat.activation_history = type(splat.activation_history)(10)  # Assuming capacity is 10
             for value in splat_data["activation_history"]:
                 splat.activation_history.add(value)
@@ -169,7 +185,7 @@ def apply_delta(
         registry.register(splat)
         splats_by_id[splat.id] = splat
     
-    # Modify existing splats (first pass without setting relationships)
+    # Modify existing splats (first pass without relationships)
     for splat_data in delta.get("modified_splats", []):
         splat_id = splat_data["id"]
         
@@ -180,6 +196,7 @@ def apply_delta(
             position = serializer._deserialize_array(splat_data["position"])
             covariance = serializer._deserialize_array(splat_data["covariance"])
             
+            # Update parameters
             splat.update_parameters(
                 position=position,
                 covariance=covariance,
@@ -198,8 +215,7 @@ def apply_delta(
                 splat.info_contribution = splat_data["info_contribution"]
             
             if "activation_history" in splat_data:
-                # Clear current history
-                # Create a new history buffer with the same capacity
+                # Clear current history and create a new one
                 splat.activation_history = type(splat.activation_history)(10)  # Assuming capacity is 10
                 
                 # Add new values
@@ -212,63 +228,58 @@ def apply_delta(
         except ValueError:
             logger.warning(f"Failed to modify splat {splat_id}: not found")
     
-    # Second pass: update relationships for added and modified splats
+    # Second pass: Clear all relationship information that will be updated
     all_updated_splats = delta.get("added_splats", []) + delta.get("modified_splats", [])
+    
+    # Track splats whose relationships will be updated
+    splats_to_update = set()
     for splat_data in all_updated_splats:
         splat_id = splat_data["id"]
-        
+        if splat_id in splats_by_id:
+            splat = splats_by_id[splat_id]
+            splats_to_update.add(splat)
+            
+            # Clear parent relationship
+            if splat.parent:
+                # Remove from parent's children set
+                if splat.parent.id in splats_by_id and splat in splat.parent.children:
+                    splat.parent.children.remove(splat)
+                splat.parent = None
+    
+    # Third pass: Re-establish all relationships
+    for splat_data in all_updated_splats:
+        splat_id = splat_data["id"]
         if splat_id not in splats_by_id:
             continue
         
         splat = splats_by_id[splat_id]
         
-        # Update parent
+        # Set new parent
         parent_id = splat_data.get("parent_id")
-        
-        # First remove from current parent's children set if different
-        if splat.parent and (parent_id is None or splat.parent.id != parent_id):
-            try:
-                splat.parent.children.remove(splat)
-            except KeyError:
-                logger.warning(f"Splat {splat_id} not found in parent's children set")
-            splat.parent = None
-        
-        # Set new parent if provided
         if parent_id and parent_id in splats_by_id:
             new_parent = splats_by_id[parent_id]
-            if splat.parent != new_parent:
-                splat.parent = new_parent
-                new_parent.children.add(splat)
+            splat.parent = new_parent
+            new_parent.children.add(splat)
         
-        # Update children
-        # First get current children IDs and expected children IDs
-        current_children_ids = {child.id for child in splat.children}
-        expected_children_ids = set(splat_data.get("children_ids", []))
-        
-        # Remove children that are no longer associated
-        for child_id in current_children_ids - expected_children_ids:
+        # Update children relationships
+        child_ids = splat_data.get("children_ids", [])
+        for child_id in child_ids:
             if child_id in splats_by_id:
                 child = splats_by_id[child_id]
-                try:
-                    splat.children.remove(child)
-                except KeyError:
-                    logger.warning(f"Child {child_id} not found in splat's children set")
-                if child.parent == splat:
-                    child.parent = None
-        
-        # Add new children
-        for child_id in expected_children_ids - current_children_ids:
-            if child_id in splats_by_id:
-                child = splats_by_id[child_id]
+                # Update child's parent reference
+                if child.parent != splat:
+                    # If child has a different parent, update that first
+                    if child.parent and child in child.parent.children:
+                        child.parent.children.remove(child)
+                    child.parent = splat
+                # Add to children set
                 splat.children.add(child)
-                child.parent = splat
     
-    # Fix any relationship issues
+    # Repair any relationship issues
     registry.repair_integrity()
     
     return registry
-
-
+    
 def save_registry_delta(
     serializer: HSASerializer,
     old_registry: SplatRegistry,

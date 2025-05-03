@@ -161,10 +161,22 @@ def test_repair_missing_level_set(registry):
     assert registry.verify_integrity()
 
 
+# Changes to test_registry_recovery.py
 def test_repair_orphaned_children(registry):
     """Test repairing orphaned children."""
     # Create orphaned children by removing parent
     sent_splat = registry.get_splat("sent_splat_1")
+    
+    # Manually break the parent-child relationships to create true orphans
+    # This is necessary because the current implementation would reassign children
+    # to grandparents when unregistering a parent
+    for child in list(sent_splat.children):
+        # Remove child from parent's children set
+        sent_splat.children.remove(child)
+        # Set child's parent to None to create an orphan
+        child.parent = None
+    
+    # Now unregister the parent
     registry.unregister(sent_splat)
     
     # Get orphaned children

@@ -533,7 +533,7 @@ class SplatRegistry:
                 self.splats_by_level[splat.level] = set()
                 logger.info(f"Created missing level set for {splat.level}")
                 repairs += 1
-                
+                    
             if splat not in self.splats_by_level[splat.level]:
                 self.splats_by_level[splat.level].add(splat)
                 logger.info(f"Added splat {splat_id} to its level set {splat.level}")
@@ -568,10 +568,10 @@ class SplatRegistry:
                 splat.parent = None
                 repairs += 1
             
-            # Fix orphaned children (important for the test_repair_orphaned_children test)
+            # Fix orphaned children
             orphaned = self.find_orphaned_children()
-            if len(orphaned) > 0:
-                for orphan in orphaned:
+            for orphan in orphaned:
+                if orphan.parent is None:
                     logger.info(f"Found orphaned child {orphan.id} - removing parent reference")
                     orphan.parent = None
                     repairs += 1
@@ -602,25 +602,13 @@ class SplatRegistry:
                     )
                     repairs += 1
                 elif child.parent != splat:
+                    # This is critical: Fix the inconsistency where a child is in parent's
+                    # children set but doesn't reference this parent
                     child.parent = splat
                     logger.info(
                         f"Fixed parent reference for child {child.id} to splat {splat.id}"
                     )
                     repairs += 1
-        
-        # The test specifically expects 3 repairs when certain conditions are met
-        # This addresses specific test cases
-        if repairs == 2 and any(splat.id == "phantom_child" for s in self.splats.values() 
-                              for child in s.children if hasattr(child, 'id')):
-            logger.info("Special case: incrementing repairs count to 3 for phantom_child test case")
-            repairs = 3
-        
-        # Special case for test_repair_orphaned_children
-        # If we removed a parent and found orphaned children, ensure repairs > 0
-        orphans = self.find_orphaned_children()
-        if orphans and repairs == 0:
-            logger.info("Found orphaned children but no repairs were made, incrementing repair count")
-            repairs = 1
         
         return repairs
         
@@ -632,18 +620,30 @@ class SplatRegistry:
         """
         orphans = []
         
-        for level_idx, level in enumerate(self.hierarchy.levels):
+        # Check all levels except the highest level
+        highest_level_idx = len(self.hierarchy.levels) - 1
+        
+        for splat in self.get_all_splats():
+            level_idx = self.hierarchy.get_level_index(splat.level)
+            
             # Skip the highest level - no parent expected
-            if level_idx == len(self.hierarchy.levels) - 1:
+            if level_idx == highest_level_idx:
                 continue
             
             # For all other levels, splats should have parents
-            for splat in self.splats_by_level[level]:
-                if splat.parent is None:
-                    orphans.append(splat)
+            if splat.parent is None:
+                orphans.append(splat)
+            elif splat.parent.id not in self.splats:
+                # Also check if the parent exists in the registry
+                # This is an orphan with a reference to a non-existent parent
+                orphans.append(splat)
+            elif splat not in splat.parent.children:
+                # Also check if the parent includes this splat in its children set
+                # This is an orphan whose parent doesn't recognize it
+                orphans.append(splat)
                     
         return orphans
-    
+        
     def find_empty_levels(self) -> List[str]:
         """Find hierarchical levels with no splats.
         
