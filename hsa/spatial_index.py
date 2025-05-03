@@ -536,3 +536,55 @@ class _Node:
         
         # Clear splats from this node
         self.splats = []
+
+
+# Add forward reference to SpatialIndexFactory to avoid circular imports
+# This is a function that will be lazily imported when needed
+def get_spatial_index_factory():
+    """Get the SpatialIndexFactory class lazily to avoid circular imports."""
+    from .spatial_index_factory import SpatialIndexFactory
+    return SpatialIndexFactory
+
+# Create a class-like object that forwards calls to the real factory
+class SpatialIndexFactory:
+    """Forward reference to the real SpatialIndexFactory.
+    
+    This class forwards all calls to the real SpatialIndexFactory in spatial_index_factory.py
+    to avoid circular imports.
+    """
+    
+    @staticmethod
+    def create_index(*args, **kwargs):
+        """Forward to the real create_index method."""
+        factory = get_spatial_index_factory()
+        return factory.create_index(*args, **kwargs)
+    
+    @staticmethod
+    def analyze_data_distribution(*args, **kwargs):
+        """Forward to the real analyze_data_distribution method."""
+        factory = get_spatial_index_factory()
+        return factory.analyze_data_distribution(*args, **kwargs)
+    
+    @staticmethod
+    def optimize_grid_parameters(*args, **kwargs):
+        """Forward to the real optimize_grid_parameters method."""
+        factory = get_spatial_index_factory()
+        return factory.optimize_grid_parameters(*args, **kwargs)
+    
+    @staticmethod
+    def optimize_tree_parameters(*args, **kwargs):
+        """Forward to the real optimize_tree_parameters method."""
+        factory = get_spatial_index_factory()
+        return factory.optimize_tree_parameters(*args, **kwargs)
+    
+    @staticmethod
+    def create_optimized_index(*args, **kwargs):
+        """Forward to the real create_optimized_index method."""
+        factory = get_spatial_index_factory()
+        return factory.create_optimized_index(*args, **kwargs)
+    
+    @staticmethod
+    def benchmark_index(*args, **kwargs):
+        """Forward to the real benchmark_index method."""
+        factory = get_spatial_index_factory()
+        return factory.benchmark_index(*args, **kwargs)
