@@ -129,9 +129,25 @@ class AdaptationController:
         try:
             # Phase 1: Measurement
             logger.info("Adaptation cycle - Phase 1: Measurement")
-            self.metrics_cache = self.metrics_aggregator.compute_all_metrics(
-                self.registry, tokens
-            )
+            
+            # Make sure metrics cache is initialized
+            if self.metrics_cache is None:
+                self.metrics_cache = {}
+            
+            # Compute metrics for all splats
+            all_splats = self.registry.get_all_splats()
+            if all_splats:
+                # Use metrics aggregator to compute metrics for all splats
+                computed_metrics = self.metrics_aggregator.compute_all_metrics(
+                    self.registry, tokens
+                )
+                
+                # Store the computed metrics in the cache
+                self.metrics_cache = computed_metrics
+                
+                logger.info(f"Computed metrics for {len(self.metrics_cache)} splats")
+            else:
+                logger.warning("No splats in registry to compute metrics for")
             
             # Phase 2: Analysis
             logger.info("Adaptation cycle - Phase 2: Analysis")
@@ -161,13 +177,12 @@ class AdaptationController:
             logger.info("Adaptation cycle - Phase 4: Stabilization")
             # Nothing to do here currently - just allow system to stabilize
             
-            # Clear metrics cache after adaptation
-            self.metrics_cache = {}
-            
             return results
             
         except Exception as e:
             logger.error(f"Error during adaptation cycle: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return results
     
     def _analyze_metrics(self) -> List[AdaptationTarget]:
@@ -177,6 +192,11 @@ class AdaptationController:
             List of adaptation targets
         """
         targets = []
+        
+        # Check if metrics cache is populated
+        if not self.metrics_cache:
+            logger.warning("Metrics cache is empty during analysis phase")
+            return targets
         
         # Check for splats with low activation (death candidates)
         death_candidates = self._identify_death_candidates()
@@ -364,6 +384,11 @@ class AdaptationController:
             Activation value (0.0 if splat not found)
         """
         try:
+            # First check in metrics cache
+            if splat_id in self.metrics_cache:
+                return self.metrics_cache[splat_id].activation_mean
+            
+            # If not in cache, get directly from splat
             splat = self.registry.get_splat(splat_id)
             return splat.get_average_activation()
         except ValueError:
@@ -486,10 +511,12 @@ class AdaptationController:
         try:
             if target.splat_id:
                 splat = self.registry.get_splat(target.splat_id)
-                metrics_before = self.metrics_cache.get(
-                    target.splat_id,
-                    self.metrics_computer.compute_metrics(splat, self.registry, tokens)
-                )
+                # First try to get from cache
+                if target.splat_id in self.metrics_cache:
+                    metrics_before = self.metrics_cache[target.splat_id]
+                else:
+                    # If not in cache, compute directly
+                    metrics_before = self.metrics_computer.compute_metrics(splat, self.registry, tokens)
         except ValueError:
             # Splat not found - might have been removed already
             logger.warning(f"Splat {target.splat_id} not found for adaptation")
@@ -543,9 +570,10 @@ class AdaptationController:
         Returns:
             Result of the operation
         """
-        from . import mitosis  # Avoid circular import
-        
         try:
+            # Import here to avoid circular imports
+            from . import mitosis
+            
             splat = self.registry.get_splat(target.splat_id)
             
             # Use mitosis module to generate candidate splats
@@ -599,6 +627,8 @@ class AdaptationController:
             
         except Exception as e:
             logger.error(f"Error during mitosis: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return AdaptationResult(
                 success=False,
                 adaptation_type=AdaptationType.MITOSIS,
@@ -624,9 +654,10 @@ class AdaptationController:
         Returns:
             Result of the operation
         """
-        from . import birth  # Avoid circular import
-        
         try:
+            # Import here to avoid circular imports
+            from . import birth
+            
             # Get target position from parameters (if provided)
             position = None
             if "position" in target.parameters:
@@ -666,6 +697,10 @@ class AdaptationController:
                 best_splat, self.registry, tokens
             )
             
+            # Update metrics cache with the new splat
+            if self.metrics_cache is not None:
+                self.metrics_cache[best_splat.id] = metrics_after
+            
             return AdaptationResult(
                 success=True,
                 adaptation_type=AdaptationType.BIRTH,
@@ -679,6 +714,8 @@ class AdaptationController:
             
         except Exception as e:
             logger.error(f"Error during birth: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return AdaptationResult(
                 success=False,
                 adaptation_type=AdaptationType.BIRTH,
@@ -710,6 +747,10 @@ class AdaptationController:
             # Remove the splat from the registry
             self.registry.unregister(splat)
             
+            # Remove from metrics cache
+            if self.metrics_cache is not None and target.splat_id in self.metrics_cache:
+                del self.metrics_cache[target.splat_id]
+            
             # No metrics after (splat is gone)
             
             return AdaptationResult(
@@ -725,6 +766,8 @@ class AdaptationController:
             
         except Exception as e:
             logger.error(f"Error during death: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return AdaptationResult(
                 success=False,
                 adaptation_type=AdaptationType.DEATH,
@@ -752,9 +795,10 @@ class AdaptationController:
         Returns:
             Result of the operation
         """
-        from . import merge  # Avoid circular import
-        
         try:
+            # Import here to avoid circular imports
+            from . import merge
+            
             # Ensure we have both splats
             if not target.secondary_splat_id:
                 return AdaptationResult(
@@ -791,6 +835,13 @@ class AdaptationController:
                 splat_a, splat_b, candidates, self.registry, tokens
             )
             
+            # Remove from metrics cache if it exists
+            if self.metrics_cache is not None:
+                if target.splat_id in self.metrics_cache:
+                    del self.metrics_cache[target.splat_id]
+                if target.secondary_splat_id in self.metrics_cache:
+                    del self.metrics_cache[target.secondary_splat_id]
+            
             # Replace the original splats with the merged one
             # Remove both originals
             self.registry.unregister(splat_a)
@@ -803,6 +854,10 @@ class AdaptationController:
             metrics_after = self.metrics_computer.compute_metrics(
                 best_splat, self.registry, tokens
             )
+            
+            # Update metrics cache
+            if self.metrics_cache is not None:
+                self.metrics_cache[best_splat.id] = metrics_after
             
             return AdaptationResult(
                 success=True,
@@ -817,6 +872,8 @@ class AdaptationController:
             
         except Exception as e:
             logger.error(f"Error during merge: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return AdaptationResult(
                 success=False,
                 adaptation_type=AdaptationType.MERGE,
@@ -870,6 +927,10 @@ class AdaptationController:
                 splat, self.registry, tokens
             )
             
+            # Update metrics cache
+            if self.metrics_cache is not None:
+                self.metrics_cache[splat.id] = metrics_after
+            
             return AdaptationResult(
                 success=True,
                 adaptation_type=AdaptationType.ADJUST,
@@ -883,6 +944,8 @@ class AdaptationController:
             
         except Exception as e:
             logger.error(f"Error during adjustment: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return AdaptationResult(
                 success=False,
                 adaptation_type=AdaptationType.ADJUST,

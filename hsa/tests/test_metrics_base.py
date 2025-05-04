@@ -115,28 +115,28 @@ class TestAdaptationMetricsBase(unittest.TestCase):
         # Each pair should have similarity 0.8
         for _, _, similarity in similar_pairs:
             self.assertEqual(similarity, 0.8)
-    
+  
     def test_metrics_aggregator_find_splats_for_death(self):
         """Test finding splats for death."""
         # Create aggregator with mock computer
         aggregator = AdaptationMetricsAggregator(self.mock_metrics_computer)
-        
-        # Mock returns 0.5 for activation, threshold is 0.01, so all should be found
+
+        # Mock returns 0.5 for activation, threshold is 0.6
         candidates = aggregator.find_splats_for_death(
             self.registry, activation_threshold=0.6, min_lifetime=0
         )
-        
-        # No splats should be found (activation 0.5 > threshold 0.01)
-        self.assertEqual(len(candidates), 0)
-        
-        # Try with higher threshold
+
+        # All splats should be found (activation 0.5 <= threshold 0.6)
+        self.assertEqual(len(candidates), len(self.splats))
+
+        # Try with lower threshold
         candidates = aggregator.find_splats_for_death(
             self.registry, activation_threshold=0.4, min_lifetime=0
         )
         
-        # All splats should be found
-        self.assertEqual(len(candidates), len(self.splats))
-    
+        # No splats should be found (activation 0.5 > threshold 0.4)
+        self.assertEqual(len(candidates), 0)
+      
     def test_metrics_aggregator_find_splats_for_mitosis(self):
         """Test finding splats for mitosis."""
         # Create aggregator with mock computer
