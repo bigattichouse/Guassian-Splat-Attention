@@ -18,9 +18,6 @@ from .spatial_index import SpatialIndexFactory
 # Configure logging
 logger = logging.getLogger(__name__)
 
-
-# sparse_attention_utils.py
-
 def compute_token_relevance(
     tokens: np.ndarray,
     splat: Splat
