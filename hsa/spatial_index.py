@@ -244,6 +244,8 @@ class SpatialIndex:
         
         return self.root.get_all_splats()
     
+# spatial_index.py
+
     def _rebuild(self) -> None:
         """Rebuild the tree to balance it."""
         # Get all splats
@@ -253,15 +255,29 @@ class SpatialIndex:
         self.root = None
         self.splat_to_node = {}
         self.num_nodes = 0
-        self.num_splats = 0
         self.max_current_depth = 0
+        self.num_splats = 0  # Reset count to avoid duplicate counting
+        old_rebuild_count = self.rebuild_count
         
-        # Reinsert all splats
+        # Create a new root
+        self.root = _Node(
+            dim=self.dim,
+            depth=0,
+            max_leaf_size=self.max_leaf_size,
+            max_depth=self.max_depth
+        )
+        
+        # Insert all splats
         for splat in all_splats:
-            self.insert(splat)
+            node = self.root.insert(splat)
+            self.splat_to_node[splat.id] = node
         
-        self.rebuild_count += 1
-    
+        # Update statistics
+        self.num_splats = len(all_splats)  # Set directly rather than incrementing
+        self.num_nodes = self._count_nodes(self.root)
+        self.max_current_depth = self._max_depth(self.root)
+        self.rebuild_count = old_rebuild_count + 1  # Only increment once
+        
     def _count_nodes(self, node) -> int:
         """Recursively count the number of nodes in the tree.
         
@@ -372,6 +388,8 @@ class _Node:
             else:
                 return self.children[1].insert(splat)
     
+# spatial_index.py
+
     def remove(self, splat_id: str) -> bool:
         """Remove a splat from this node or its descendants.
         
@@ -392,93 +410,75 @@ class _Node:
             return False
         else:
             # Try both children
-            for child in self.children:
-                if child.remove(splat_id):
-                    return True
+            left_success = self.children[0].remove(splat_id)
+            right_success = self.children[1].remove(splat_id)
             
-            return False
-    
-    def find_nearest(self, position: np.ndarray, k: int, nearest: PriorityQueue) -> None:
+            return left_success or right_success
+            
+    def find_nearest(self, position: np.ndarray, k: int = 1) -> List[Tuple[Splat, float]]:
         """Find the k nearest splats to a position.
         
         Args:
             position: Query position in embedding space
             k: Number of nearest neighbors to find
-            nearest: Priority queue to store results
+            
+        Returns:
+            List of (splat, distance) tuples sorted by distance
         """
-        if self.is_leaf():
-            # Check all splats in this leaf
-            for splat in self.splats:
-                # Calculate distance
-                dist = np.linalg.norm(splat.position - position)
-                
-                # Add to queue
-                if nearest.qsize() < k:
-                    nearest.put((dist, splat))
-                else:
-                    # Replace furthest if this is closer
-                    furthest_dist, _ = nearest.queue[0]  # Peek at worst item
-                    if dist < furthest_dist:
-                        nearest.get()  # Remove worst
-                        nearest.put((dist, splat))
-        else:
-            # Determine which child to visit first
-            if position[self.split_axis] <= self.split_value:
-                first, second = self.children
-            else:
-                second, first = self.children
-            
-            # Visit first child
-            first.find_nearest(position, k, nearest)
-            
-            # Check if we need to visit the second child
-            if nearest.qsize() < k:
-                # Queue not full, definitely visit second child
-                second.find_nearest(position, k, nearest)
-            else:
-                # Check if second child could have closer points
-                furthest_dist, _ = nearest.queue[0]  # Peek at worst item
-                
-                # Distance to the splitting plane
-                plane_dist = abs(position[self.split_axis] - self.split_value)
-                
-                if plane_dist < furthest_dist:
-                    # Second child could have closer points
-                    second.find_nearest(position, k, nearest)
-    
-    def range_query(self, center: np.ndarray, radius: float, results: List[Splat]) -> None:
+        if self.root is None or self.num_splats == 0:
+            return []
+        
+        # Validate position dimension
+        if position.shape != (self.dim,):
+            raise ValueError(
+                f"Position shape {position.shape} does not match index dimension {(self.dim,)}"
+            )
+        
+        # Limit k to number of splats
+        k = min(k, self.num_splats)
+        
+        # Use priority queue for nearest neighbors
+        nearest = PriorityQueue()
+        
+        # Search the tree
+        self.root.find_nearest(position, k, nearest)
+        
+        # Extract results
+        results = []
+        while not nearest.empty():
+            dist, splat = nearest.get()
+            results.append((splat, dist))
+        
+        # Sort by distance (nearest first)
+        results.reverse()
+        
+        return results    
+        
+    def range_query(self, center: np.ndarray, radius: float) -> List[Splat]:
         """Find all splats within a given radius of a center point.
         
         Args:
             center: Center position in embedding space
             radius: Search radius
-            results: List to store results
-        """
-        if self.is_leaf():
-            # Check all splats in this leaf
-            for splat in self.splats:
-                # Calculate distance
-                dist = np.linalg.norm(splat.position - center)
-                
-                # Add if within radius
-                if dist <= radius:
-                    results.append(splat)
-        else:
-            # Distance to the splitting plane
-            plane_dist = abs(center[self.split_axis] - self.split_value)
             
-            # Check if the sphere crosses the splitting plane
-            if plane_dist <= radius:
-                # Crosses the plane, check both children
-                self.children[0].range_query(center, radius, results)
-                self.children[1].range_query(center, radius, results)
-            else:
-                # Only check the side containing the center
-                if center[self.split_axis] <= self.split_value:
-                    self.children[0].range_query(center, radius, results)
-                else:
-                    self.children[1].range_query(center, radius, results)
-    
+        Returns:
+            List of splats within the radius
+        """
+        if self.root is None or self.num_splats == 0:
+            return []
+        
+        # Validate position dimension
+        if center.shape != (self.dim,):
+            raise ValueError(
+                f"Position shape {center.shape} does not match index dimension {(self.dim,)}"
+            )
+        
+        # Search the tree
+        results = []
+        self.root.range_query(center, radius, results)
+        
+        return results
+        
     def filter_by_level(self, level: str, results: List[Splat]) -> None:
         """Find all splats at a specific level.
         
@@ -497,17 +497,14 @@ class _Node:
                 child.filter_by_level(level, results)
     
     def get_all_splats(self) -> List[Splat]:
-        """Get all splats in this node and its descendants.
-        
-        Returns:
-            List of all splats
-        """
+        """Get all splats in this node and its descendants."""
         if self.is_leaf():
-            return self.splats.copy()
+            return self.splats.copy()  # Make sure to return a copy
         else:
             splats = []
             for child in self.children:
-                splats.extend(child.get_all_splats())
+                if child is not None:  # Check if child exists
+                    splats.extend(child.get_all_splats())
             return splats
     
     def _split(self) -> None:

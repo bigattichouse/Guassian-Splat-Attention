@@ -189,11 +189,16 @@ class GridSpatialIndex:
         if self.num_splats == 0:
             return []
         
-        # Validate position dimension
+        # Validate position dimension - need stricter validation
+        if len(position.shape) != 1 or position.shape[0] != self.dim:
+            raise ValueError(
+                f"Position shape {position.shape} does not match index dimension {(self.dim,)}"
+            )
         if position.shape != (self.dim,):
             raise ValueError(
                 f"Position shape {position.shape} does not match index dimension {(self.dim,)}"
             )
+
         
         # Limit k to number of splats
         k = min(k, self.num_splats)
@@ -235,7 +240,7 @@ class GridSpatialIndex:
         
         # Limit to k
         return distances[:k]
-    
+        
     def range_query(self, center: np.ndarray, radius: float) -> List[Splat]:
         """Find all splats within a given radius of a center point.
         
@@ -249,7 +254,11 @@ class GridSpatialIndex:
         if self.num_splats == 0:
             return []
         
-        # Validate position dimension
+        # Validate position dimension - need stricter validation
+        if len(center.shape) != 1 or center.shape[0] != self.dim:
+            raise ValueError(
+                f"Position shape {center.shape} does not match index dimension {(self.dim,)}"
+            )
         if center.shape != (self.dim,):
             raise ValueError(
                 f"Position shape {center.shape} does not match index dimension {(self.dim,)}"
@@ -276,8 +285,8 @@ class GridSpatialIndex:
             if dist <= radius:
                 results.append(splat)
         
-        return results
-    
+        return results    
+        
     def find_by_level(self, level: str, position: np.ndarray, k: int = 5) -> List[Tuple[Splat, float]]:
         """Find the k nearest splats at a specific level.
         
@@ -325,7 +334,7 @@ class GridSpatialIndex:
             all_splats.extend(splats)
         return all_splats
     
-    def _get_neighbor_cells(self, cell: Tuple, radius: int) -> List[Tuple]:
+    def _get_neighbor_cells(self, cell: tuple, radius: int) -> list:
         """Get neighbor cells at a specific radius.
         
         Args:
@@ -370,5 +379,11 @@ class GridSpatialIndex:
                             neighbors.append((cell[0] + i, cell[1] + j, cell[2] - k_pos))
         else:
             # For higher dimensions, just use a simpler approximation
-            # Get all cells within a hypercube of side length 2*radius
-            import iter
+            # Generate neighbors along each axis
+            for d in range(self.dim):
+                for direction in [-1, 1]:
+                    neighbor = list(cell)
+                    neighbor[d] += direction * radius
+                    neighbors.append(tuple(neighbor))
+        
+        return neighbors
