@@ -331,3 +331,147 @@ class InfoTheoreticCandidateEvaluator(SplatCandidateEvaluator):
             coverage_ratio = 0.0
         
         return coverage_ratio
+    
+    def _compute_merge_coverage_score(
+        self,
+        splat_a: Splat,
+        splat_b: Splat,
+        merged_splat: Splat,
+        tokens: Optional[np.ndarray]
+    ) -> float:
+        """Compute how well a merged splat covers the original splats' regions.
+        
+        Args:
+            splat_a: First original splat
+            splat_b: Second original splat
+            merged_splat: Candidate merged splat
+            tokens: Optional token embeddings
+            
+        Returns:
+            Coverage score between 0 and 1
+        """
+        if tokens is None or tokens.shape[0] == 0:
+            # Without tokens, use a geometric heuristic
+            # Check how well the merged splat covers both original splats
+            
+            # Compute distances from merged splat to original splats
+            dist_a = np.linalg.norm(merged_splat.position - splat_a.position)
+            dist_b = np.linalg.norm(merged_splat.position - splat_b.position)
+            
+            # Normalize by original splats' "radii"
+            radius_a = np.sqrt(np.trace(splat_a.covariance) / splat_a.dim)
+            radius_b = np.sqrt(np.trace(splat_b.covariance) / splat_b.dim)
+            
+            norm_dist_a = dist_a / max(radius_a, 1e-6)
+            norm_dist_b = dist_b / max(radius_b, 1e-6)
+            
+            # Compute coverage scores (closer is better)
+            coverage_a = np.exp(-norm_dist_a)
+            coverage_b = np.exp(-norm_dist_b)
+            
+            # Average coverage, weighted by original splats' amplitudes
+            total_amplitude = splat_a.amplitude + splat_b.amplitude
+            if total_amplitude > 0:
+                weighted_coverage = (
+                    (splat_a.amplitude * coverage_a + splat_b.amplitude * coverage_b) / 
+                    total_amplitude
+                )
+            else:
+                weighted_coverage = (coverage_a + coverage_b) / 2
+            
+            return weighted_coverage
+        
+        # With tokens, compute actual coverage
+        # Get token weights for the original splats
+        weights_a = self._compute_token_weights(splat_a, tokens)
+        weights_b = self._compute_token_weights(splat_b, tokens)
+        
+        # Combined original weights (union of both splats)
+        original_weights = np.maximum(weights_a, weights_b)
+        
+        # Get token weights for merged splat
+        merged_weights = self._compute_token_weights(merged_splat, tokens)
+        
+        # Compute coverage ratio
+        total_original = np.sum(original_weights)
+        covered = np.sum(np.minimum(original_weights, merged_weights))
+        
+        if total_original > 0:
+            coverage_ratio = covered / total_original
+        else:
+            coverage_ratio = 0.0
+        
+        return coverage_ratio
+    
+    def _compute_adjust_coverage_score(
+        self,
+        original_splat: Splat,
+        adjusted_splat: Splat,
+        tokens: Optional[np.ndarray]
+    ) -> float:
+        """Compute how well an adjusted splat maintains coverage of the original splat.
+        
+        Args:
+            original_splat: Original splat
+            adjusted_splat: Adjusted splat
+            tokens: Optional token embeddings
+            
+        Returns:
+            Coverage score between 0 and 1
+        """
+        if tokens is None or tokens.shape[0] == 0:
+            # Without tokens, use a geometric heuristic
+            # Measure similarity of the splats
+            
+            # Compute distance between centers
+            dist = np.linalg.norm(adjusted_splat.position - original_splat.position)
+            
+            # Normalize by original splat's "radius"
+            radius = np.sqrt(np.trace(original_splat.covariance) / original_splat.dim)
+            norm_dist = dist / max(radius, 1e-6)
+            
+            # Compute similarity score
+            similarity = np.exp(-norm_dist)
+            
+            # Compute covariance similarity
+            cov_diff = adjusted_splat.covariance - original_splat.covariance
+            cov_norm = np.linalg.norm(cov_diff, 'fro')
+            cov_similarity = np.exp(-0.1 * cov_norm)
+            
+            # Combined score
+            return 0.7 * similarity + 0.3 * cov_similarity
+        
+        # With tokens, compute actual coverage
+        # Get token weights for the original splat
+        original_weights = self._compute_token_weights(original_splat, tokens)
+        
+        # Get token weights for adjusted splat
+        adjusted_weights = self._compute_token_weights(adjusted_splat, tokens)
+        
+        # Compute coverage ratio
+        total_original = np.sum(original_weights)
+        covered = np.sum(np.minimum(original_weights, adjusted_weights))
+        
+        if total_original > 0:
+            coverage_ratio = covered / total_original
+        else:
+            coverage_ratio = 0.0
+        
+        return coverage_ratio
+    
+    def _compute_token_weights(
+        self,
+        splat: Splat,
+        tokens: np.ndarray
+    ) -> np.ndarray:
+        """Compute weight of each token for a splat.
+        
+        Args:
+            splat: Splat to compute weights for
+            tokens: Token embeddings
+            
+        Returns:
+            Array of token weights
+        """
+        # Use metrics computer's implementation
+        return self.metrics_computer._compute_token_weights(splat, tokens)
