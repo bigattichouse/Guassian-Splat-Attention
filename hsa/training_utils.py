@@ -349,30 +349,42 @@ def transfer_from_pretrained(
     # Clear target registry and initialize with same hierarchy
     target_registry.hierarchy = source_registry.hierarchy
     
-    # Add all splats to target registry
+    # Create a mapping from source splat ID to target splat ID
+    id_mapping = {}  # Maps source splat ID to new splat ID
+    
+    # First pass: Add all splats to target registry without relationships
     for splat in source_splats:
         # Clone the splat
         new_splat = splat.clone()
         
         # Add to target registry
         target_registry.register(new_splat)
+        
+        # Store the mapping
+        id_mapping[splat.id] = new_splat.id
     
-    # Ensure consistency of parent-child relationships
-    parent_map = {}
+    # Second pass: Establish parent-child relationships
     for splat in source_splats:
         if splat.parent is not None:
-            parent_id = splat.parent.id
-            if parent_id in parent_map:
-                new_splat = target_registry.get_splat(splat.id)
-                new_parent = target_registry.get_splat(parent_map[parent_id])
-                new_splat.parent = new_parent
-                new_parent.children.add(new_splat)
+            # Get the IDs
+            source_id = splat.id
+            parent_source_id = splat.parent.id
+            
+            # If both IDs are in the mapping, establish the relationship
+            if source_id in id_mapping and parent_source_id in id_mapping:
+                child_splat = target_registry.get_splat(id_mapping[source_id])
+                parent_splat = target_registry.get_splat(id_mapping[parent_source_id])
+                
+                # Set parent reference
+                child_splat.parent = parent_splat
+                
+                # Add to parent's children set
+                parent_splat.children.add(child_splat)
     
     # Repair any integrity issues
     target_registry.repair_integrity()
     
     return target_registry
-
 
 def compute_splat_gradients(
     attention_matrix: np.ndarray,
