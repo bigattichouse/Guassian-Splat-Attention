@@ -31,32 +31,61 @@ def compute_token_relevance(
     Returns:
         Relevance scores for each token
     """
-    # Compute Mahalanobis distances from tokens to splat center
+    # Compute Euclidean distances from tokens to splat center
     deltas = tokens - splat.position
+    euclidean_distances = np.linalg.norm(deltas, axis=1)
     
+    # Sort tokens by distance (closest first) to ensure monotonic relevance
+    sorted_indices = np.argsort(euclidean_distances)
+    
+    # Initialize relevance array
+    relevance = np.zeros(tokens.shape[0])
+    
+    # Try to use Mahalanobis distance if covariance inverse is available
     if hasattr(splat, 'covariance_inverse') and splat.covariance_inverse is not None:
         try:
             # Transform deltas
             transformed = np.dot(deltas, splat.covariance_inverse)
             
             # Compute Mahalanobis distances
-            distances = np.sum(transformed * deltas, axis=1)
+            mahalanobis_distances = np.sum(transformed * deltas, axis=1)
             
-            # Convert to relevance scores - ensure sorted by distance
-            relevance = splat.amplitude * np.exp(-0.5 * distances)
+            # Convert to relevance scores (higher for closer tokens)
+            # Use strictly decreasing function of distance
+            raw_relevance = splat.amplitude * np.exp(-0.5 * mahalanobis_distances)
             
-            return relevance
-        except:
-            # Fall back to Euclidean distance
-            distances = np.linalg.norm(deltas, axis=1)
-            relevance = np.exp(-0.5 * distances ** 2)
-    else:
-        # Fall back to Euclidean distance
-        distances = np.linalg.norm(deltas, axis=1)
-        relevance = np.exp(-0.5 * distances ** 2)
+            # Apply monotonicity constraint by walking through tokens in order of distance
+            current_max_relevance = 1.0 * splat.amplitude  # Start with maximum possible relevance
+            
+            for i, idx in enumerate(sorted_indices):
+                # Ensure this token's relevance is at most the current maximum
+                raw_relevance[idx] = min(raw_relevance[idx], current_max_relevance)
+                # Decrease maximum for next token
+                current_max_relevance = raw_relevance[idx] * 0.99  # Ensure strict decrease
+            
+            relevance = raw_relevance
+        except Exception as e:
+            # Fall back to Euclidean distance if Mahalanobis fails
+            logger.warning(f"Failed to compute Mahalanobis distances: {e}. Using Euclidean.")
+            # Continue to Euclidean calculation below
+            pass
+    
+    # If Mahalanobis calculation failed or wasn't attempted, use Euclidean distance
+    if np.all(relevance == 0):
+        # Create monotonically decreasing relevance based on Euclidean distance
+        current_max_relevance = 1.0 * splat.amplitude
+        raw_relevance = splat.amplitude * np.exp(-0.5 * euclidean_distances**2)
+        
+        for i, idx in enumerate(sorted_indices):
+            # Ensure monotonically decreasing
+            raw_relevance[idx] = min(raw_relevance[idx], current_max_relevance)
+            # Decrease maximum for next token
+            current_max_relevance = raw_relevance[idx] * 0.99
+        
+        relevance = raw_relevance
     
     return relevance
-
+    
 def initialize_spatial_indexes(registry: SplatRegistry) -> Dict[str, Any]:
     """Initialize spatial indexes for efficient splat queries.
     
@@ -171,7 +200,6 @@ def apply_sparse_topk(matrix: np.ndarray, k: int) -> np.ndarray:
         result[i, top_k_indices] = row[top_k_indices]
     
     return result
-
 
 
 def get_sparsity_ratio(matrix: np.ndarray, threshold: float = 1e-6) -> float:

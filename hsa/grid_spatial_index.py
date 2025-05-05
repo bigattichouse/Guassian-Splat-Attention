@@ -185,20 +185,18 @@ class GridSpatialIndex:
             
         Returns:
             List of (splat, distance) tuples sorted by distance
+            
+        Raises:
+            ValueError: If position dimension doesn't match index dimension
         """
+        # Validate position dimension first, before any early returns
+        if len(position) != self.dim:
+            raise ValueError(
+                f"Position dimension {len(position)} does not match index dimension {self.dim}"
+            )
+            
         if self.num_splats == 0:
             return []
-        
-        # Validate position dimension - need stricter validation
-        if len(position.shape) != 1 or position.shape[0] != self.dim:
-            raise ValueError(
-                f"Position shape {position.shape} does not match index dimension {(self.dim,)}"
-            )
-        if position.shape != (self.dim,):
-            raise ValueError(
-                f"Position shape {position.shape} does not match index dimension {(self.dim,)}"
-            )
-
         
         # Limit k to number of splats
         k = min(k, self.num_splats)
@@ -235,12 +233,12 @@ class GridSpatialIndex:
             dist = np.linalg.norm(splat.position - position)
             distances.append((splat, dist))
         
-        # Sort by distance (nearest first)
-        distances.sort(key=lambda x: x[1])
+        # Sort by distance (nearest first), then by ID for determinism
+        distances.sort(key=lambda x: (x[1], x[0].id))
         
         # Limit to k
         return distances[:k]
-        
+
     def range_query(self, center: np.ndarray, radius: float) -> List[Splat]:
         """Find all splats within a given radius of a center point.
         
@@ -250,19 +248,18 @@ class GridSpatialIndex:
             
         Returns:
             List of splats within the radius
+            
+        Raises:
+            ValueError: If center dimension doesn't match index dimension
         """
+        # Validate position dimension first, before any early returns
+        if len(center) != self.dim:
+            raise ValueError(
+                f"Center dimension {len(center)} does not match index dimension {self.dim}"
+            )
+            
         if self.num_splats == 0:
             return []
-        
-        # Validate position dimension - need stricter validation
-        if len(center.shape) != 1 or center.shape[0] != self.dim:
-            raise ValueError(
-                f"Position shape {center.shape} does not match index dimension {(self.dim,)}"
-            )
-        if center.shape != (self.dim,):
-            raise ValueError(
-                f"Position shape {center.shape} does not match index dimension {(self.dim,)}"
-            )
         
         # Calculate cells that could contain points within radius
         cell_radius = int(np.ceil(radius / self.cell_size))
@@ -285,7 +282,7 @@ class GridSpatialIndex:
             if dist <= radius:
                 results.append(splat)
         
-        return results    
+        return results
         
     def find_by_level(self, level: str, position: np.ndarray, k: int = 5) -> List[Tuple[Splat, float]]:
         """Find the k nearest splats at a specific level.
@@ -297,7 +294,16 @@ class GridSpatialIndex:
             
         Returns:
             List of (splat, distance) tuples sorted by distance
+            
+        Raises:
+            ValueError: If position dimension doesn't match index dimension
         """
+        # Validate position dimension first
+        if len(position) != self.dim:
+            raise ValueError(
+                f"Position dimension {len(position)} does not match index dimension {self.dim}"
+            )
+            
         if self.num_splats == 0:
             return []
         
@@ -317,8 +323,8 @@ class GridSpatialIndex:
             dist = np.linalg.norm(splat.position - position)
             distances.append((splat, dist))
         
-        # Sort by distance (nearest first)
-        distances.sort(key=lambda x: x[1])
+        # Sort by distance (nearest first), then by ID for determinism
+        distances.sort(key=lambda x: (x[1], x[0].id))
         
         # Limit to k
         return distances[:k]
