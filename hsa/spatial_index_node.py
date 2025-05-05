@@ -1,4 +1,3 @@
-# spatial_index_node.py
 """
 Node implementation for spatial indexing in Hierarchical Splat Attention (HSA).
 
@@ -6,8 +5,9 @@ This module provides the internal node class used by the spatial index to
 organize splats in a tree structure for efficient spatial queries.
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Set
 import numpy as np
+import heapq
 from queue import PriorityQueue
 
 from .splat import Splat
@@ -104,75 +104,58 @@ class _Node:
                     return True
             
             return False
-            
+    
     def find_nearest(self, position: np.ndarray, k: int, nearest: PriorityQueue) -> None:
         """Find k nearest splats to position.
         
         Args:
             position: Query position
             k: Number of nearest neighbors to find
-            nearest: Priority queue to store results
+            nearest: Priority queue to store results (negated distance, id, splat)
         """
         if self.is_leaf():
             # For leaf nodes, compute distance to all splats
             for splat in self.splats:
+                # Calculate Euclidean distance
                 dist = np.linalg.norm(splat.position - position)
                 
-                # Use negative distance for priority (highest priority is smallest distance)
-                # Include splat ID to ensure unique comparisons when distances are equal
+                # Add to priority queue (negative distance for max-heap behavior)
+                item = (-dist, splat.id, splat)
+                
                 if nearest.qsize() < k:
-                    nearest.put((-dist, splat.id, splat))
-                elif nearest.queue[0][0] < -dist:  # Check if this is farther than our current closest
-                    # If the queue is full, remove the farthest one
-                    nearest.get()
-                    nearest.put((-dist, splat.id, splat))
+                    nearest.put(item)
+                else:
+                    # Compare with the largest distance currently in the queue
+                    # If this one is smaller, remove the largest and add this one
+                    if -dist > nearest.queue[0][0]:
+                        nearest.get()  # Remove the largest distance item
+                        nearest.put(item)
         else:
-            # For internal nodes, recursively search the appropriate subtree first
-            if position[self.split_axis] <= self.split_value:
-                # Search left subtree first
-                self.children[0].find_nearest(position, k, nearest)
-                
-                # Check if we need to search the right subtree
-                need_right = False
-                if nearest.qsize() < k:
-                    need_right = True
-                else:
-                    # Check if the other side could have closer points
-                    # Get the distance to the splitting plane
-                    dist_to_plane = abs(position[self.split_axis] - self.split_value)
-                    
-                    # The farthest distance among current results (absolute value)
-                    if nearest.queue:
-                        farthest_dist = -nearest.queue[0][0]
-                        if dist_to_plane < farthest_dist:
-                            need_right = True
-                    else:
-                        need_right = True
-                
-                if need_right:
-                    self.children[1].find_nearest(position, k, nearest)
+            # For internal nodes, determine which child to search first
+            first_child_idx = 0 if position[self.split_axis] <= self.split_value else 1
+            second_child_idx = 1 - first_child_idx
+            
+            # Search the most promising child first
+            self.children[first_child_idx].find_nearest(position, k, nearest)
+            
+            # Check if we need to search the other child
+            # Only search if:
+            # 1. We haven't found k points yet, or
+            # 2. The distance to the splitting plane is less than the largest distance in our queue
+            if nearest.qsize() < k:
+                # Not enough points found yet
+                self.children[second_child_idx].find_nearest(position, k, nearest)
             else:
-                # Search right subtree first
-                self.children[1].find_nearest(position, k, nearest)
+                # Calculate distance to splitting plane
+                dist_to_plane = abs(position[self.split_axis] - self.split_value)
                 
-                # Check if we need to search the left subtree
-                need_left = False
-                if nearest.qsize() < k:
-                    need_left = True
-                else:
-                    # Check if the other side could have closer points
-                    dist_to_plane = abs(position[self.split_axis] - self.split_value)
-                    
-                    # The farthest distance among current results
-                    if nearest.queue:
-                        farthest_dist = -nearest.queue[0][0]
-                        if dist_to_plane < farthest_dist:
-                            need_left = True
-                    else:
-                        need_left = True
+                # Get the largest distance in our queue (negated)
+                farthest_dist = -nearest.queue[0][0]
                 
-                if need_left:
-                    self.children[0].find_nearest(position, k, nearest)
+                # If the plane is closer than our current kth nearest neighbor,
+                # we need to check the other side
+                if dist_to_plane < farthest_dist:
+                    self.children[second_child_idx].find_nearest(position, k, nearest)
 
     def range_query(self, center: np.ndarray, radius: float, results: List[Splat]) -> None:
         """Find all splats within radius of center.

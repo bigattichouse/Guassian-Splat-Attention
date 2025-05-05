@@ -9,6 +9,7 @@ from typing import List, Dict, Set, Tuple, Optional, Any, Union
 import numpy as np
 import logging
 from queue import PriorityQueue
+import heapq
 
 from .splat import Splat
 from .spatial_index_node import _Node
@@ -161,6 +162,50 @@ class SpatialIndex:
         # Limit k to number of splats
         k = min(k, self.num_splats)
         
+        # Get all splats and calculate exact distances
+        all_splats = self.get_all_splats()
+        distances = []
+        
+        for splat in all_splats:
+            # Calculate Euclidean distance
+            dist = np.linalg.norm(splat.position - position)
+            distances.append((splat, dist))
+        
+        # Sort by distance (nearest first)
+        # Use a stable sort for consistent results when distances are equal
+        distances.sort(key=lambda x: (x[1], x[0].id))
+        
+        # Return top k
+        return distances[:k]
+    
+    def find_nearest_efficient(self, position: np.ndarray, k: int = 1) -> List[Tuple[Splat, float]]:
+        """Find the k nearest splats to a position using efficient tree traversal.
+        
+        This method is optimized for larger datasets where the tree structure
+        provides significant acceleration.
+        
+        Args:
+            position: Query position in embedding space
+            k: Number of nearest neighbors to find
+            
+        Returns:
+            List of (splat, distance) tuples sorted by distance
+            
+        Raises:
+            ValueError: If position dimension doesn't match index dimension
+        """
+        # Validate position dimension first, before any early returns
+        if len(position) != self.dim:
+            raise ValueError(
+                f"Position dimension {len(position)} does not match index dimension {self.dim}"
+            )
+            
+        if self.root is None or self.num_splats == 0:
+            return []
+        
+        # Limit k to number of splats
+        k = min(k, self.num_splats)
+        
         # Use priority queue for nearest neighbors
         # Use negative distance so smallest distance has highest priority
         nearest = PriorityQueue()
@@ -177,20 +222,7 @@ class SpatialIndex:
         # Return in order of increasing distance (nearest first)
         results.reverse()
         
-        # Instead of using the custom sort, we'll manually calculate distances directly from the splats
-        # to ensure exact consistency with the test expectations
-        
-        # Get all splats to calculate exact distances consistently with the test
-        all_distances = []
-        for splat in self.get_all_splats():
-            dist = np.linalg.norm(splat.position - position)
-            all_distances.append((splat, dist))
-        
-        # Sort by distance (nearest first)
-        all_distances.sort(key=lambda x: x[1])
-        
-        # Take top k
-        return all_distances[:k]
+        return results
     
     def range_query(self, center: np.ndarray, radius: float) -> List[Splat]:
         """Find all splats within a given radius of a center point.
