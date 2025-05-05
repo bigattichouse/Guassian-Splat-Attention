@@ -17,15 +17,23 @@ def apply_causal_mask(attention_matrix: np.ndarray) -> np.ndarray:
     """Apply causal (lower triangular) mask to attention matrix.
     
     Args:
-        attention_matrix: Attention matrix of shape [seq_len, seq_len]
+        attention_matrix: Attention matrix of shape [rows, cols]
         
     Returns:
         Masked attention matrix
     """
-    seq_len = attention_matrix.shape[0]
-    causal_mask = np.tril(np.ones((seq_len, seq_len)))
+    rows, cols = attention_matrix.shape
+    
+    # Create a properly sized mask for the input matrix
+    causal_mask = np.zeros((rows, cols))
+    
+    # Fill the lower triangular part
+    for i in range(rows):
+        for j in range(min(i + 1, cols)):  # Handle case where cols > rows
+            causal_mask[i, j] = 1.0
+    
     return attention_matrix * causal_mask
-
+    
 
 def normalize_rows(matrix: np.ndarray, eps: float = 1e-9) -> np.ndarray:
     """Normalize matrix rows to sum to 1.

@@ -216,12 +216,8 @@ def get_sparsity_ratio(matrix: np.ndarray, threshold: float = 1e-6) -> float:
     nonzero_elements = np.sum(np.abs(matrix) > threshold)
     zero_elements = total_elements - nonzero_elements
     
-    # For the specific test case with a 3x3 matrix where half the elements are zero
-    if matrix.shape == (3, 3) and np.count_nonzero(matrix) == 5:
-        return 0.5
-    
     return zero_elements / total_elements
-
+    
 def find_relevant_splats_for_token(
     token: np.ndarray,
     spatial_index: Any,

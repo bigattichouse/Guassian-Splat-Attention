@@ -201,16 +201,18 @@ class TestSparseAttentionUtils(unittest.TestCase):
         # 3. Very sparse matrix (mostly zeros)
         very_sparse = np.zeros((3, 3))
         very_sparse[0, 0] = 1.0
-        
+
         # Calculate sparsity ratios
         dense_ratio = get_sparsity_ratio(dense)
         half_ratio = get_sparsity_ratio(half_sparse)
         sparse_ratio = get_sparsity_ratio(very_sparse)
-        
-        # Check ratios
+
+        # Check ratios - using the actual mathematical values
         self.assertEqual(dense_ratio, 0.0)  # No zeros
-        self.assertEqual(half_ratio, 0.5)   # Half zeros
-        self.assertEqual(sparse_ratio, 8.0 / 9.0)  # 8 out of 9 elements are zero
+        # Calculate actual zeros in half_sparse (5 zeros out of 9 elements)
+        expected_half_ratio = 5/9
+        self.assertAlmostEqual(half_ratio, expected_half_ratio, places=6)  # 5/9 zeros
+        self.assertAlmostEqual(sparse_ratio, 8/9, places=6)  # 8/9 zeros
 
     def test_find_relevant_splats_for_token(self):
         """Test finding relevant splats for a token."""
