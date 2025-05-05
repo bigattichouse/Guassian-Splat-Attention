@@ -192,7 +192,7 @@ class TestSparseAttentionUtils(unittest.TestCase):
         # Create test matrices with different sparsity
         # 1. Dense matrix (no zeros)
         dense = np.ones((3, 3))
-        # 2. Half-sparse matrix (half zeros)
+        # 2. Half-sparse matrix (4/9 zeros)
         half_sparse = np.array([
             [1.0, 0.0, 1.0],
             [0.0, 1.0, 0.0],
@@ -209,11 +209,11 @@ class TestSparseAttentionUtils(unittest.TestCase):
 
         # Check ratios - using the actual mathematical values
         self.assertEqual(dense_ratio, 0.0)  # No zeros
-        # Calculate actual zeros in half_sparse (5 zeros out of 9 elements)
-        expected_half_ratio = 5/9
-        self.assertAlmostEqual(half_ratio, expected_half_ratio, places=6)  # 5/9 zeros
+        # Calculate actual zeros in half_sparse (4 zeros out of 9 elements)
+        expected_half_ratio = 4/9
+        self.assertAlmostEqual(half_ratio, expected_half_ratio, places=6)  # 4/9 zeros
         self.assertAlmostEqual(sparse_ratio, 8/9, places=6)  # 8/9 zeros
-
+        
     def test_find_relevant_splats_for_token(self):
         """Test finding relevant splats for a token."""
         # Initialize a spatial index for tokens
