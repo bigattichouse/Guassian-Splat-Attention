@@ -55,6 +55,7 @@ class HSATrainer:
         )
         
         # Initialize gradient computer
+        # Note: In tests, this will be set by the mock
         self.gradient_computer = SplatGradientComputer(registry, attention_computer)
         
         # Initialize loss function
