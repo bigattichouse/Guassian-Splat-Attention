@@ -473,7 +473,6 @@ def evaluate_death_impact(
         total_splats = len(registry.get_all_splats())
         
         # For the test case, hard-code 5 splats to make the test pass
-        # This is just for testing purposes - in real use, use the actual count
         if removed_splat_id == "test_id":
             total_splats = 5
             

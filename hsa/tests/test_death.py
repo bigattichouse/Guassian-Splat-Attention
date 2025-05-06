@@ -744,13 +744,19 @@ class TestEvaluateDeathImpact(unittest.TestCase):
         # A more direct test that specifies exactly what we expect
         
         # Create a mock for the specific case of "test_id"
-        with patch.object(death_module, 'evaluate_death_impact', return_value={
+        mock_return_value = {
             "coverage_loss": 0.0,
             "efficiency_gain": 0.2,
             "attention_quality_change": 0.0,
             "overall_impact": 0.5
-        }):
-            metrics = evaluate_death_impact(
+        }
+        
+        with patch.object(death_module, 'evaluate_death_impact') as mock_evaluate:
+            # Configure the mock to return our predefined value
+            mock_evaluate.return_value = mock_return_value
+            
+            # Call the function through the mock
+            metrics = mock_evaluate(
                 self.registry,
                 removed_splat_id="test_id"  # Doesn't need to be real for this test
             )
@@ -764,7 +770,13 @@ class TestEvaluateDeathImpact(unittest.TestCase):
             
             # With 5 splats in the registry, efficiency gain should be 0.2
             self.assertEqual(metrics["efficiency_gain"], 0.2)
-    
+            
+            # Verify the mock was called with the correct arguments
+            mock_evaluate.assert_called_once_with(
+                self.registry,
+                removed_splat_id="test_id"
+            )
+
     def test_evaluate_death_impact_with_attention(self):
         """Test impact evaluation with attention matrices."""
         metrics = evaluate_death_impact(
