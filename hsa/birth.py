@@ -324,19 +324,24 @@ def create_initial_splats(
     highest_scale = 2.0  # Larger covariance at higher levels
     
     for pos in positions:
-        covariance = np.eye(dim) * highest_scale
-        
-        splat = Splat(
-            dim=dim,
-            position=pos,
-            covariance=covariance,
-            amplitude=1.0,
-            level=highest_level
-        )
-        
-        registry.register(splat)
-        highest_splats.append(splat)
-        total_created += 1
+        try:
+            covariance = np.eye(dim) * highest_scale
+            
+            splat = Splat(
+                dim=dim,
+                position=pos,
+                covariance=covariance,
+                amplitude=1.0,
+                level=highest_level
+            )
+            
+            registry.register(splat)
+            highest_splats.append(splat)
+            total_created += 1
+        except Exception as e:
+            logger.error(f"Failed to create splat: {e}")
+            registry.recovery_count += 1
+            continue
     
     # Now create splats at lower levels with parent-child relationships
     for level_idx in range(len(levels) - 2, -1, -1):  # Iterate from second-highest to lowest
@@ -344,6 +349,10 @@ def create_initial_splats(
         count = init_counts[level_idx]
         parent_level = levels[level_idx + 1]
         parent_splats = list(registry.get_splats_at_level(parent_level))
+        
+        # Skip if no parent splats
+        if not parent_splats:
+            continue
         
         # Calculate splats per parent (approximately)
         splats_per_parent = max(1, count // len(parent_splats))
@@ -360,26 +369,31 @@ def create_initial_splats(
                 if splats_created >= count:
                     break
                 
-                # Generate position near parent
-                offset = np.random.normal(0, 0.3, dim)
-                position = parent.position + offset
-                
-                # Create covariance (smaller than parent)
-                covariance = np.eye(dim) * scale
-                
-                # Create splat
-                splat = Splat(
-                    dim=dim,
-                    position=position,
-                    covariance=covariance,
-                    amplitude=1.0,
-                    level=level,
-                    parent=parent
-                )
-                
-                registry.register(splat)
-                splats_created += 1
-                total_created += 1
+                try:
+                    # Generate position near parent
+                    offset = np.random.normal(0, 0.3, dim)
+                    position = parent.position + offset
+                    
+                    # Create covariance (smaller than parent)
+                    covariance = np.eye(dim) * scale
+                    
+                    # Create splat
+                    splat = Splat(
+                        dim=dim,
+                        position=position,
+                        covariance=covariance,
+                        amplitude=1.0,
+                        level=level,
+                        parent=parent
+                    )
+                    
+                    registry.register(splat)
+                    splats_created += 1
+                    total_created += 1
+                except Exception as e:
+                    logger.error(f"Failed to create splat: {e}")
+                    registry.recovery_count += 1
+                    continue
             
             if splats_created >= count:
                 break
