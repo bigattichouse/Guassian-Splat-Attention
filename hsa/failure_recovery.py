@@ -47,6 +47,7 @@ class FailureRecovery:
         self.repair_threshold = repair_threshold
         
         # Initialize failure detector
+        from .failure_detection import FailureDetector
         self.detector = FailureDetector()
         
         # Track recovery attempts
@@ -147,6 +148,8 @@ class FailureRecovery:
                     actions.append(action)
                     
             elif failure_type == FailureType.ADAPTATION_STAGNATION:
+                # Import from recovery_actions to ensure it's properly imported
+                from .recovery_actions import recover_adaptation_stagnation
                 action = recover_adaptation_stagnation(
                     self.registry, 
                     self.adaptation_controller,
@@ -744,7 +747,3 @@ class FailureRecovery:
                 report["recommended_actions"].append("repair_integrity")
         
         return report
-
-
-# Import failure detector here to avoid circular imports
-from .failure_detection import FailureDetector
