@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-HSA Chat CLI - Command-line interface for chatting with models using Hierarchical Splat Attention.
+HSA Inference CLI - Command-line interface for inference with locally trained HSA models.
 
-This application loads a model from Hugging Face, replaces its attention mechanism with HSA,
+This application loads a locally saved HSA model, along with its registry state,
 and provides a simple chat interface with attention statistics.
 """
 
@@ -22,16 +22,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, P
 from hsa.splat import Splat
 from hsa.hierarchy import Hierarchy
 from hsa.registry import SplatRegistry
-from hsa.dense_attention import DenseAttentionComputer
-from hsa.sparse_attention import SparseAttentionComputer
 from hsa.attention_interface import AttentionConfig
 from hsa.adaptation_controller import AdaptationController
-from hsa.adaptation_metrics_base import AdaptationMetricsComputer, SplatCandidateEvaluator
-from hsa.attention_info_metrics import InfoTheoreticMetricsComputer, InfoTheoreticCandidateEvaluator
-
-# Import the HSA model adapter
 from hsa.model_adapter import create_adapter_for_model, ContextExtender
-from hsa.chat_app_config import get_config
+from hsa.serialization_core import HSASerializer
+from hsa.compact_serialization import load_registry_compact
 
 # Set up logging
 logging.basicConfig(
@@ -42,113 +37,182 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class ChatCLI:
-    """Command-line interface for chatting with HSA-enhanced models."""
+class HSAInference:
+    """Interface for inference with HSA-enhanced models."""
     
     def __init__(
         self,
-        model_name: str,
+        model_path: str,
+        registry_path: Optional[str] = None,
         max_length: int = 2048,
         temperature: float = 0.7,
         use_sparse: bool = True,
         adaptation_enabled: bool = True,
         show_stats: bool = True,
-        extend_context: bool = True,
-        max_context_length: Optional[int] = 65535
+        device: str = "cpu"
     ):
-        """Initialize chat interface.
+        """Initialize inference interface.
         
         Args:
-            model_name: Name of the model to load from Hugging Face
+            model_path: Path to the local model directory
+            registry_path: Path to the saved HSA registry file (if None, look in model_path)
             max_length: Maximum sequence length for generation
             temperature: Temperature for generation
             use_sparse: Whether to use sparse attention
             adaptation_enabled: Whether to enable HSA adaptation
             show_stats: Whether to show HSA stats after each generation
-            extend_context: Whether to extend context window
-            max_context_length: Maximum context length if extending
+            device: Device to run the model on ("cpu", "cuda", etc.)
         """
-        self.model_name = model_name
+        self.model_path = model_path
+        self.registry_path = registry_path
         self.max_length = max_length
         self.temperature = temperature
         self.use_sparse = use_sparse
         self.adaptation_enabled = adaptation_enabled
         self.show_stats = show_stats
-        self.extend_context = extend_context
-        self.max_context_length = max_context_length
+        self.device = device
         
         # Load model and tokenizer
-        logger.info(f"Loading model and tokenizer: {model_name}")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        logger.info(f"Loading model and tokenizer from: {model_path}")
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+            self.model = AutoModelForCausalLM.from_pretrained(model_path)
+            
+            # Move model to the specified device
+            self.model.to(device)
+            
+            logger.info(f"Model loaded successfully on {device}")
+        except Exception as e:
+            logger.error(f"Error loading model: {e}")
+            raise ValueError(f"Failed to load model from {model_path}: {e}")
         
         # Enable padding in the tokenizer if not already enabled
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         
-        # Create HSA adapter
-        logger.info("Creating HSA adapter for model")
-        hierarchy_levels = ["token", "phrase", "sentence", "document"]
+        # Try to find registry file if not specified
+        if not self.registry_path:
+            # Check for common registry filenames in the model directory
+            for filename in ["final_registry.bin", "final_registry_compact.bin", 
+                            "registry.bin", "registry_compact.bin"]:
+                potential_path = os.path.join(model_path, filename)
+                if os.path.exists(potential_path):
+                    self.registry_path = potential_path
+                    logger.info(f"Found registry file: {potential_path}")
+                    break
         
-        self.model_patcher, self.registry = create_adapter_for_model(
-            model=self.model,
-            use_sparse=use_sparse,
-            adaptation_enabled=adaptation_enabled,
-            hierarchy_levels=hierarchy_levels,
-            max_context_length=max_context_length
-        )
+        # Initialize or load registry
+        if self.registry_path and os.path.exists(self.registry_path):
+            logger.info(f"Loading HSA registry from: {self.registry_path}")
+            
+            try:
+                # Try loading with compact serialization first
+                if self.registry_path.endswith(("_compact.bin", ".json")):
+                    self.registry = load_registry_compact(self.registry_path)
+                else:
+                    # Fall back to standard serialization
+                    serializer = HSASerializer()
+                    self.registry = serializer.load_from_file(self.registry_path)
+                
+                logger.info(f"Registry loaded successfully, containing {self.registry.count_splats()} splats")
+                
+                # Create adapter with loaded registry
+                self.model_patcher, _ = create_adapter_for_model(
+                    model=self.model,
+                    use_sparse=use_sparse,
+                    adaptation_enabled=adaptation_enabled
+                )
+                
+                # Replace with loaded registry
+                self.model_patcher.registry = self.registry
+                
+            except Exception as e:
+                logger.error(f"Error loading registry: {e}")
+                logger.warning("Initializing new registry instead")
+                self.model_patcher, self.registry = create_adapter_for_model(
+                    model=self.model,
+                    use_sparse=use_sparse,
+                    adaptation_enabled=adaptation_enabled
+                )
+        else:
+            logger.info("No registry file found, initializing new registry")
+            self.model_patcher, self.registry = create_adapter_for_model(
+                model=self.model,
+                use_sparse=use_sparse,
+                adaptation_enabled=adaptation_enabled
+            )
         
         # Patch the model with HSA
         logger.info("Patching model with HSA attention")
         self.model_patcher.patch_model()
         
-        # Set up context extension if enabled
-        if extend_context and max_context_length:
-            logger.info(f"Setting up context extension to {max_context_length}")
-            self.context_extender = ContextExtender(
-                model=self.model,
-                tokenizer=self.tokenizer,
-                patcher=self.model_patcher,
-                registry=self.registry
-            )
-            self.context_extender.extend_context(max_context_length)
-        else:
-            self.context_extender = None
-        
         # Get adaptation controller if available
         self.adaptation_controller = getattr(self.model_patcher, "adaptation_controller", None)
         
-        if os.path.exists("hsa_states"):
-            self._load_saved_state()
-        
         # Chat history
         self.chat_history = []
-    
+        
+    def _truncate_history(self, max_tokens=512):
+        """Truncate history to avoid exceeding model's context window."""
+        if not self.chat_history:
+            return
+            
+        # Calculate current token count
+        full_prompt = self._format_conversation()
+        tokens = self.tokenizer.encode(full_prompt)
+        
+        # If we're under the limit, no need to truncate
+        if len(tokens) <= max_tokens:
+            return
+            
+        # Remove oldest messages until we're under the limit
+        while len(tokens) > max_tokens and len(self.chat_history) > 1:
+            self.chat_history.pop(0)  # Remove oldest message
+            full_prompt = self._format_conversation()
+            tokens = self.tokenizer.encode(full_prompt)
+            
+        logger.info(f"Truncated history to {len(tokens)} tokens (limit: {max_tokens})")
+        
     def generate_response(self, prompt: str) -> str:
         """Generate a response using the model with HSA attention."""
         # Add the prompt to the history
         self.chat_history.append({"role": "user", "content": prompt})
-        
+    
+        # Truncate history if needed
+        self._truncate_history()
+    
         # Create full conversation input
         full_prompt = self._format_conversation()
         
         # Tokenize input
         inputs = self.tokenizer(full_prompt, return_tensors="pt", padding=True)
         
-        # Ensure attention mask is explicitly set
-        attention_mask = inputs.attention_mask
+        # Move inputs to the same device as the model
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        
+        input_length = len(inputs.input_ids[0])
+        
+        # Calculate appropriate max_new_tokens value
+        max_context = getattr(self.model.config, "max_position_embeddings", 1024)
+        max_new_tokens = max(1, min(self.max_length, max_context - input_length))
+        
+        # Log generation parameters
+        logger.info(f"Input length: {input_length}, Max new tokens: {max_new_tokens}")
         
         # Generate response
         with torch.no_grad():
-            # Generate with HSA and explicit attention mask
+            start_time = time.time()
+            
             outputs = self.model.generate(
                 inputs.input_ids,
-                attention_mask=attention_mask,  # Explicitly pass the attention mask
-                max_length=self.max_length,
+                max_new_tokens=max_new_tokens,
                 temperature=self.temperature,
                 do_sample=True,
-                pad_token_id=self.tokenizer.pad_token_id
+                pad_token_id=self.tokenizer.pad_token_id,
+                attention_mask=inputs.attention_mask
             )
+            
+            generation_time = time.time() - start_time
         
         # Decode and extract the response
         output_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -159,10 +223,10 @@ class ChatCLI:
         
         # Print stats if enabled
         if self.show_stats:
-            self._display_stats()
+            self._display_stats(generation_time)
         
         return response
-    
+        
     def _format_conversation(self) -> str:
         """Format the conversation history into a prompt string."""
         # This is a simple implementation - customize based on your model's expected format
@@ -181,7 +245,7 @@ class ChatCLI:
         
         return formatted
     
-    def _display_stats(self):
+    def _display_stats(self, generation_time: float):
         """Display HSA statistics."""
         # Get stats from model patcher
         stats = self.model_patcher.get_stats()
@@ -197,6 +261,7 @@ class ChatCLI:
         
         # Display stats
         print("\n--- HSA Statistics ---")
+        print(f"Generation time: {generation_time:.2f} seconds")
         print(f"Total splats: {registry_stats['total_splats']}")
         print("Splats by level:")
         for level, count in registry_stats['splats_by_level'].items():
@@ -215,13 +280,6 @@ class ChatCLI:
             print(f"  Total adaptations: {adapt_stats.get('total_adaptations', 0)}")
             for op_type, count in adapt_stats.get('adaptation_counts', {}).items():
                 print(f"  {op_type}: {count}")
-        
-        # Display context extension stats if available
-        if self.context_extender:
-            ext_stats = self.context_extender.get_stats()
-            print("Context extension:")
-            print(f"  Original length: {ext_stats.get('original_length', 0)}")
-            print(f"  Current length: {ext_stats.get('current_length', 0)}")
         
         print("----------------------\n")
     
@@ -283,97 +341,38 @@ class ChatCLI:
             for op_type, count in adapt_stats.get('adaptation_counts', {}).items():
                 print(f"  {op_type}: {count}")
         
-        # Context extension stats if available
-        if self.context_extender:
-            ext_stats = self.context_extender.get_stats()
-            print("\nContext Extension:")
-            for key, value in ext_stats.items():
-                print(f"  {key}: {value}")
-        
         print("\n==============================\n")
     
-    def _save_state(self):
-        """Save the current HSA state."""
-        import os
-        import json
-        
+    def _save_state(self, output_path=None):
+        """Save the current HSA registry state."""
         try:
-            # Import the necessary components
-            from hsa.serialization_formats import save_to_file
-            from hsa.serialization_core import HSASerializer
+            # Import necessary components
+            from hsa.compact_serialization import save_registry_compact
             
-            # Create output directory if it doesn't exist
-            output_dir = "hsa_states"
-            os.makedirs(output_dir, exist_ok=True)
+            # Create default output path if not provided
+            if not output_path:
+                output_dir = "hsa_states"
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(output_dir, f"hsa_state_{int(time.time())}.bin")
             
-            # Create serializer
-            serializer = HSASerializer()
+            # Save registry in compact binary format
+            size_mb = save_registry_compact(
+                registry=self.registry,
+                filepath=output_path,
+                format="binary",
+                include_history=True,
+                compression_level=9
+            )
             
-            # Save registry
-            filename = os.path.join(output_dir, f"hsa_state_{int(time.time())}.bin")
-            save_to_file(serializer, self.registry, filename, format="binary")
+            print(f"HSA registry state saved to {output_path} ({size_mb:.2f} MB)")
+            return output_path
             
-            # Save metadata about the most recent save
-            metadata = {"latest_save": filename}
-            with open(os.path.join(output_dir, "metadata.json"), "w") as f:
-                json.dump(metadata, f)
-            
-            print(f"HSA state saved to {filename}")
         except Exception as e:
             print(f"Error saving state: {e}")
             import traceback
             print(traceback.format_exc())
-            
-            
-    def _load_saved_state(self):
-        """Load the most recently saved HSA state if available."""
-        import os
-        import json
-        
-        try:
-            # Check for metadata file
-            metadata_path = os.path.join("hsa_states", "metadata.json")
-            if not os.path.exists(metadata_path):
-                logger.info("No saved state metadata found")
-                return False
-            
-            # Read metadata
-            with open(metadata_path, "r") as f:
-                metadata = json.load(f)
-            
-            latest_save = metadata.get("latest_save")
-            if not latest_save or not os.path.exists(latest_save):
-                logger.info(f"Saved state file not found: {latest_save}")
-                return False
-            
-            # Import necessary components
-            from hsa.serialization_core import HSASerializer
-            from hsa.serialization_formats import load_from_file
-            
-            # Create serializer
-            serializer = HSASerializer()
-            
-            # Load registry
-            loaded_registry = load_from_file(serializer, latest_save)
-            
-            # Replace current registry
-            self.registry = loaded_registry
-            
-            # Update model patcher and adaptation controller with new registry
-            if hasattr(self.model_patcher, "registry"):
-                self.model_patcher.registry = loaded_registry
-            
-            if self.adaptation_controller:
-                self.adaptation_controller.registry = loaded_registry
-            
-            logger.info(f"Loaded HSA state from {latest_save}")
-            return True
-        except Exception as e:
-            logger.error(f"Error loading saved state: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
-            
+            return None
+    
     def _reset_hsa(self):
         """Reset HSA to initial state."""
         # Re-initialize registry
@@ -387,8 +386,15 @@ class ChatCLI:
     
     def run(self):
         """Run the chat interface."""
-        print(f"Chatting with {self.model_name} using Hierarchical Splat Attention")
-        print("Type 'exit' to quit, 'stats' to show detailed statistics, 'save' to save state, 'reset' to reset HSA")
+        print(f"HSA Inference CLI: Loaded model from {self.model_path}")
+        if self.registry_path:
+            print(f"Using HSA registry from {self.registry_path}")
+        print(f"Model has {self.registry.count_splats()} active splats")
+        print("\nCommands:")
+        print("  'exit' to quit")
+        print("  'stats' to show detailed statistics")
+        print("  'save' to save current HSA state")
+        print("  'reset' to reset HSA to initial state")
         
         while True:
             user_input = input("\nYou: ").strip()
@@ -400,11 +406,9 @@ class ChatCLI:
                 continue
             elif user_input.lower() == "save":
                 self._save_state()
-                print("Current state saved.")
                 continue
             elif user_input.lower() == "reset":
                 self._reset_hsa()
-                print("HSA state reset.")
                 continue
             
             # Generate response
@@ -426,26 +430,27 @@ class ChatCLI:
         if hasattr(self.model_patcher, "restore_model"):
             logger.info("Restoring original model attention")
             self.model_patcher.restore_model()
-        
-        # Restore original context if extended
-        if self.context_extender:
-            logger.info("Restoring original context length")
-            self.context_extender.restore_original_context()
 
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="Chat with an HSA-enhanced model")
+    parser = argparse.ArgumentParser(description="Run inference with a locally trained HSA model")
     parser.add_argument(
         "--model", 
         type=str, 
-        default="gpt2",
-        help="HuggingFace model name"
+        required=True,
+        help="Path to local model directory"
+    )
+    parser.add_argument(
+        "--registry", 
+        type=str, 
+        default=None,
+        help="Path to HSA registry file"
     )
     parser.add_argument(
         "--max-length", 
         type=int, 
-        default=2048,
+        default=1024,
         help="Maximum sequence length for generation"
     )
     parser.add_argument(
@@ -470,74 +475,33 @@ def main():
         help="Hide HSA stats after generation"
     )
     parser.add_argument(
-        "--extend-context", 
-        action="store_true",
-        help="Enable context window extension"
-    )
-    parser.add_argument(
-        "--max-context", 
-        type=int, 
-        default= 4096,
-        help="Maximum context length when extending context"
-    )
-    parser.add_argument(
-        "--config", 
+        "--device", 
         type=str, 
-        default=None,
-        help="Path to configuration file"
+        default="cpu",
+        help="Device to run the model on (cpu, cuda, etc.)"
     )
     
     args = parser.parse_args()
     
-    # Get configuration
-    config = get_config()
-    
-    # Override config with command line arguments
-    if args.config:
-        try:
-            with open(args.config, "r") as f:
-                file_config = json.load(f)
-                config.update(file_config)
-        except Exception as e:
-            logger.error(f"Error loading config file: {e}")
-    
-    # Command line args take precedence over config file
-    if args.model:
-        config["model"] = args.model
-    if args.max_length:
-        config["max_length"] = args.max_length
-    if args.temperature:
-        config["temperature"] = args.temperature
-    if args.no_sparse:
-        config["use_sparse"] = False
-    if args.no_adaptation:
-        config["adaptation_enabled"] = False
-    if args.no_stats:
-        config["show_stats"] = False
-    if args.extend_context:
-        config["enable_context_extension"] = True
-    if args.max_context:
-        config["max_context_length"] = args.max_context
-    
     try:
-        # Initialize chat interface
-        chat = ChatCLI(
-            model_name=config.get("model", "gpt2"),
-            max_length=config.get("max_length", 2048),
-            temperature=config.get("temperature", 0.7),
-            use_sparse=config.get("use_sparse", True),
-            adaptation_enabled=config.get("adaptation_enabled", True),
-            show_stats=config.get("show_stats", True),
-            extend_context=config.get("enable_context_extension", False),
-            max_context_length=config.get("max_context_length", 4096)
+        # Initialize interface
+        inference = HSAInference(
+            model_path=args.model,
+            registry_path=args.registry,
+            max_length=args.max_length,
+            temperature=args.temperature,
+            use_sparse=not args.no_sparse,
+            adaptation_enabled=not args.no_adaptation,
+            show_stats=not args.no_stats,
+            device=args.device
         )
         
         try:
             # Run chat loop
-            chat.run()
+            inference.run()
         finally:
             # Clean up resources
-            chat.cleanup()
+            inference.cleanup()
             
     except KeyboardInterrupt:
         print("\nExiting...")

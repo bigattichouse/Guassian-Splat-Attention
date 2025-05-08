@@ -349,13 +349,20 @@ class SplatRegistry:
                     # Higher levels have larger covariance (broader attention)
                     #scale = 1.0 + level_idx * 0.5  # Scale factors: 1.0, 1.5, 2.0, 2.5...
                     #covariance = np.eye(self.embedding_dim) * scale
-                    # Make scale factor inversely proportional to dimension for high dims
-                    if self.embedding_dim > 50:
-                        scale = 1.0 + (level_idx * 0.5) / np.log1p(self.embedding_dim)
-                    else:
-                        scale = 1.0 + level_idx * 0.5
-                    covariance = np.eye(self.embedding_dim) * scale
+                  
+                   # Make scale factor inversely proportional to dimension for high dims
+                   # if self.embedding_dim > 50:
+                   #     scale = 1.0 + (level_idx * 0.5) / np.log1p(self.embedding_dim)
+                   # else:
+                   #     scale = 1.0 + level_idx * 0.5
+                   # covariance = np.eye(self.embedding_dim) * scale
                     
+                    # Start with identity (correlation matrix)
+                    covariance = np.eye(self.embedding_dim)
+                    # Then scale the overall variance without affecting correlation structure
+                    variance_scale = 1.0 + level_idx * 0.5
+                    # Scale in a way that keeps determinant growth more controlled
+                    covariance *= variance_scale ** (1.0 / self.embedding_dim)
                     
                     # Create splat without parent for now
                     splat = Splat(
