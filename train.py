@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 """
-HSA Training Script for TinyStoriesInstruct dataset.
+HSA Training Script for TinyStories dataset.
 
 This script trains a language model enhanced with Hierarchical Splat Attention
-using the TinyStoriesInstruct dataset from Huggingface.
+using the TinyStories dataset from Huggingface.
 """
 
 import os
 import argparse
 import logging
+import json
 import torch
 import numpy as np
 from datetime import datetime
@@ -46,9 +47,10 @@ logger = logging.getLogger(__name__)
 
 # Define training hyperparameters
 DEFAULT_CONFIG = {
-    "base_model": "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T",  # Smaller model for faster training
-    "dataset_name": "roneneldan/TinyStories",
-    "dataset_config": "instruction",
+    "base_model": "gpt2", #"TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T", 
+                            # Smaller model for faster training
+    "dataset_name": "roneneldan/TinyStories-Instruct",
+    "dataset_config": None,  # Using default config instead of 'instruction'
     "output_dir": "output/hsa_trained_model",
     "num_train_epochs": 1,
     "per_device_train_batch_size": 8,
@@ -86,8 +88,8 @@ def parse_args():
                         help="Base model to train with HSA")
     parser.add_argument("--dataset_name", type=str, default=DEFAULT_CONFIG["dataset_name"],
                         help="Dataset name on Huggingface or 'local' for local files")
-    parser.add_argument("--dataset_config", type=str, default=DEFAULT_CONFIG["dataset_config"],
-                        help="Dataset configuration")
+    parser.add_argument("--dataset_config", type=str, default=None,
+                        help="Dataset configuration (use None for default)")
     parser.add_argument("--data_dir", type=str, default=None,
                         help="Directory with text files for training (when dataset_name is 'local')")
     parser.add_argument("--output_dir", type=str, default=DEFAULT_CONFIG["output_dir"],
@@ -245,6 +247,8 @@ def tokenize_dataset(dataset, tokenizer, max_seq_length):
         # Handle different column names
         if "text" in examples:
             inputs = examples["text"]
+        elif "story" in examples:  # TinyStories uses "story" as the column name
+            inputs = examples["story"]
         elif "instruction" in examples:
             inputs = examples["instruction"]
         elif "input" in examples:
@@ -296,8 +300,13 @@ def load_tokenized_dataset(dataset_name, dataset_config, tokenizer, max_seq_leng
         return load_from_text_files(data_dir, tokenizer, max_seq_length)
     
     # Load from Huggingface
-    logger.info(f"Loading dataset: {dataset_name}")
-    dataset = load_dataset(dataset_name, dataset_config)
+    logger.info(f"Loading dataset: {dataset_name} with config: {dataset_config}")
+    try:
+        dataset = load_dataset(dataset_name, dataset_config)
+    except ValueError as e:
+        logger.warning(f"Error loading dataset with config {dataset_config}: {e}")
+        logger.info("Trying to load dataset without specific config...")
+        dataset = load_dataset(dataset_name)
     
     return tokenize_dataset(dataset, tokenizer, max_seq_length)
 
@@ -594,27 +603,47 @@ def main():
         save_frequency=HSA_CONFIG["save_registry_frequency"],
         output_dir=args.output_dir
     )
-    
-    # Set up training arguments
-    training_args = TrainingArguments(
-        output_dir=args.output_dir,
-        num_train_epochs=args.epochs,
-        per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=DEFAULT_CONFIG["per_device_eval_batch_size"],
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        learning_rate=args.learning_rate,
-        weight_decay=DEFAULT_CONFIG["weight_decay"],
-        warmup_steps=DEFAULT_CONFIG["warmup_steps"],
-        evaluation_strategy=DEFAULT_CONFIG["evaluation_strategy"],
-        eval_steps=DEFAULT_CONFIG["eval_steps"],
-        save_steps=args.save_every,
-        save_total_limit=DEFAULT_CONFIG["save_total_limit"],
-        logging_steps=DEFAULT_CONFIG["logging_steps"],
-        fp16=DEFAULT_CONFIG["fp16"],
-        report_to="tensorboard",
-        push_to_hub=False,
-    )
-    
+        
+     # Set up training arguments
+    training_args_params = {
+        "output_dir": args.output_dir,
+        "num_train_epochs": args.epochs,
+        "per_device_train_batch_size": args.batch_size,
+        "per_device_eval_batch_size": DEFAULT_CONFIG["per_device_eval_batch_size"],
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "learning_rate": args.learning_rate,
+        "weight_decay": DEFAULT_CONFIG["weight_decay"],
+        "warmup_steps": DEFAULT_CONFIG["warmup_steps"],
+        "save_steps": args.save_every,
+        "save_total_limit": DEFAULT_CONFIG["save_total_limit"],
+        "logging_steps": DEFAULT_CONFIG["logging_steps"],
+        "fp16": DEFAULT_CONFIG["fp16"],
+        "report_to": "tensorboard",
+        "push_to_hub": False,
+    }
+
+    # Check if evaluation_strategy is supported
+    try:
+        # Try to create with evaluation_strategy
+        training_args = TrainingArguments(
+            **training_args_params,
+            evaluation_strategy=DEFAULT_CONFIG["evaluation_strategy"],
+            eval_steps=DEFAULT_CONFIG["eval_steps"]
+        )
+    except TypeError as e:
+        # If it fails, try with eval_strategy instead (older versions)
+        if "evaluation_strategy" in str(e):
+            logger.info("Using 'eval_strategy' instead of 'evaluation_strategy'")
+            training_args = TrainingArguments(
+                **training_args_params,
+                eval_strategy=DEFAULT_CONFIG["evaluation_strategy"],
+                eval_steps=DEFAULT_CONFIG["eval_steps"]
+            )
+        # If all else fails, try without the evaluation strategy parameters
+        else:
+            logger.warning("Evaluation strategy parameters not supported, skipping them")
+            training_args = TrainingArguments(**training_args_params)
+            
     # Initialize trainer
     trainer = HSATrainer(
         model=model,
