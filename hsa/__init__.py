@@ -28,6 +28,10 @@ from .adaptation_metrics_base import (
 from .attention_cache import AttentionCache, cache_attention
 from .attention_utils import apply_causal_mask, normalize_rows, apply_topk_mask
 
+# Attention adapters to run HSA on other models
+from .model_adapter import create_adapter_for_model, ContextExtender
+from .chat_app_config import get_config
+
 # Package version
 __version__ = "0.1.0"
 
