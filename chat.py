@@ -53,8 +53,8 @@ class ChatCLI:
         use_sparse: bool = True,
         adaptation_enabled: bool = True,
         show_stats: bool = True,
-        extend_context: bool = False,
-        max_context_length: Optional[int] = None
+        extend_context: bool = True,
+        max_context_length: Optional[int] = 65535
     ):
         """Initialize chat interface.
         
@@ -411,7 +411,7 @@ def main():
     parser.add_argument(
         "--max-context", 
         type=int, 
-        default=4096,
+        default= 4096,
         help="Maximum context length when extending context"
     )
     parser.add_argument(
