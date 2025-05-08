@@ -159,15 +159,8 @@ class Splat:
         self.lifetime = 0
     
     def _stabilize_covariance(self, covariance: np.ndarray) -> np.ndarray:
-        """Stabilize covariance matrix to ensure it's positive definite and well-conditioned.
-        
-        Args:
-            covariance: Input covariance matrix
-            
-        Returns:
-            Stabilized covariance matrix
-        """
-        # First ensure the matrix is symmetric (handle numerical errors)
+        """Stabilize covariance matrix to ensure it's positive definite and well-conditioned."""
+        # First ensure the matrix is symmetric
         covariance = 0.5 * (covariance + covariance.T)
         
         try:
@@ -179,81 +172,89 @@ class Splat:
             # Compute eigendecomposition
             eigenvalues, eigenvectors = np.linalg.eigh(covariance)
             
-            # Clip eigenvalues to ensure positive definiteness and good conditioning
-            # Use more conservative bounds to prevent numerical issues
-            min_eigenvalue = 1e-4
-            max_eigenvalue = 1e4
+            # Use much stricter bounds for high-dimensional matrices
+            # Scale min eigenvalue with dimension to prevent numerical issues
+            dim_factor = np.log1p(self.dim) # Log scaling of dimension
+            min_eigenvalue = 1e-4 * dim_factor
+            max_eigenvalue = 1e4 / dim_factor
             
-            eigenvalues = np.clip(
-                eigenvalues, 
-                min_eigenvalue, 
-                max_eigenvalue
-            )
+            eigenvalues = np.clip(eigenvalues, min_eigenvalue, max_eigenvalue)
             
             # Reconstruct matrix
             stabilized = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
             
-            # Ensure result is symmetric (handle numerical errors)
+            # Ensure result is symmetric
             stabilized = 0.5 * (stabilized + stabilized.T)
             
             return stabilized
             
         except np.linalg.LinAlgError:
-            # Fallback for numerical issues: add to diagonal and retry
-            logger.warning(
-                f"Eigendecomposition failed for covariance matrix. Using fallback method."
-            )
-            # Replace NaN or Inf values with zeros
+            # More aggressive fallback
+            logger.warning("Eigendecomposition failed. Using fallback method.")
+            # Replace NaN/Inf values with zeros
             covariance = np.nan_to_num(covariance, nan=0.0, posinf=1.0, neginf=-1.0)
-            # Add to diagonal
-            stabilized = covariance + np.eye(self.dim) * 1e-3
+            # Add larger regularization
+            stabilized = covariance + np.eye(self.dim) * 1e-2
             # Ensure symmetric
             stabilized = 0.5 * (stabilized + stabilized.T)
             return stabilized
         except Exception as e:
-            # If any other error occurs, log it and return identity matrix
+            # If any other error, return identity
             logger.error(f"Unexpected error in stabilize_covariance: {e}. Using identity matrix.")
             return np.eye(self.dim)
-
+            
     def _update_cached_values(self):
         """Update cached computation values for performance."""
         try:
             # Handle potential numerical issues
             try:
-                # Ensure covariance is positive definite
+                # Ensure covariance is positive definite with better numeric stability
                 min_eig = np.min(np.linalg.eigvalsh(self.covariance))
-                if min_eig <= 0:
-                    logger.warning("Covariance matrix not positive definite. Adding to diagonal.")
-                    self.covariance = self.covariance + np.eye(self.dim) * max(1e-4, -min_eig + 1e-4)
+                if min_eig <= 1e-6:  # Use a larger threshold
+                    logger.warning("Covariance matrix not sufficiently positive definite. Adding to diagonal.")
+                    self.covariance = self.covariance + np.eye(self.dim) * max(1e-4, -min_eig + 1e-3)
             except np.linalg.LinAlgError:
                 logger.warning("Eigenvalue computation failed. Stabilizing covariance.")
                 self.covariance = self._stabilize_covariance(self.covariance)
-                
-            # Inverse of covariance matrix - use more robust inversion
+                    
+            # Inverse of covariance matrix - use more robust methods
             try:
-                # Try with standard inversion
-                self.covariance_inverse = np.linalg.inv(self.covariance)
-            except np.linalg.LinAlgError:
-                # Try with pseudo-inverse if regular inverse fails
-                logger.warning("Matrix inversion failed. Using pseudo-inverse.")
-                self.covariance_inverse = np.linalg.pinv(self.covariance)
+                # Use pseudo-inverse instead of standard inverse for better stability
+                self.covariance_inverse = np.linalg.pinv(self.covariance, rcond=1e-10)
+            except Exception as e:
+                logger.warning(f"Matrix inversion failed: {e}. Using regularized inverse.")
+                # Fallback with stronger regularization
+                reg_matrix = self.covariance + np.eye(self.dim) * 1e-3
+                self.covariance_inverse = np.linalg.pinv(reg_matrix, rcond=1e-10)
             
-            # Normalization factor for Gaussian: 1/sqrt((2π)^d * det(Σ))
-            # Use more numerically stable method to compute determinant
+            # Use log determinant for more stable computation
             try:
-                # Compute log determinant instead of raw determinant to avoid overflow/underflow
-                log_det = np.linalg.slogdet(self.covariance)[1]
+                # Use slogdet for numerical stability
+                sign, logdet = np.linalg.slogdet(self.covariance)
                 
-                # Check if log determinant is too extreme
-                if log_det < -50:  # Very small determinant
-                    logger.warning(f"Very small determinant (log_det={log_det}). Using safe value.")
-                    self.normalization_factor = 1.0
-                elif log_det > 50:  # Very large determinant
-                    logger.warning(f"Very large determinant (log_det={log_det}). Using safe value.")
+                # Check if determinant is proper (positive for PD matrix)
+                if sign <= 0:
+                    logger.warning("Non-positive determinant detected. Using regularized matrix.")
+                    reg_matrix = self.covariance + np.eye(self.dim) * 1e-3
+                    sign, logdet = np.linalg.slogdet(reg_matrix)
+                
+                # Bound log determinant to avoid extreme values
+                if logdet < -50:  # Very small determinant
+                    logdet = -50
+                    logger.warning(f"Very small determinant (log_det={logdet}). Using bounded value.")
+                elif logdet > 50:  # Very large determinant
+                    logdet = 50
+                    logger.warning(f"Very large determinant (log_det={logdet}). Using bounded value.")
+                
+                # Compute normalization factor from bounded log determinant
+                log_normalization = -0.5 * (self.dim * np.log(2 * np.pi) + logdet)
+                self.normalization_factor = np.exp(log_normalization)
+                
+                # Ensure normalization factor is valid
+                if not np.isfinite(self.normalization_factor):
+                    logger.warning("Non-finite normalization factor. Using fallback value.")
                     self.normalization_factor = 1e-10
-                else:
-                    # Normal case - compute normalization_factor from log determinant
-                    self.normalization_factor = 1.0 / np.sqrt((2 * np.pi) ** self.dim * np.exp(log_det))
+                    
             except Exception as e:
                 logger.warning(f"Error computing determinant: {e}. Using fallback normalization.")
                 self.normalization_factor = 1.0 / np.sqrt((2 * np.pi) ** self.dim)
@@ -263,8 +264,8 @@ class Splat:
             logger.error(f"Failed to update cached values: {e}. Using identity matrix.")
             self.covariance = np.eye(self.dim)
             self.covariance_inverse = np.eye(self.dim)
-            self.normalization_factor = 1.0 / np.sqrt((2 * np.pi) ** self.dim)    
-        
+            self.normalization_factor = 1.0 / np.sqrt((2 * np.pi) ** self.dim)
+            
     def compute_distance(self, token_a: np.ndarray, token_b: np.ndarray) -> float:
         """Compute the Mahalanobis distance between two tokens through this splat.
         
