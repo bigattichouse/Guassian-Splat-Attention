@@ -243,8 +243,9 @@ class Splat:
                     logdet = -50
                     logger.warning(f"Very small determinant (log_det={logdet}). Using bounded value.")
                 elif logdet > 50:  # Very large determinant
+                    prelogdet = logdet
                     logdet = 50
-                    logger.warning(f"Very large determinant (log_det={logdet}). Using bounded value.")
+                    logger.warning(f"Very large determinant (log_det={prelogdet} >> {logdet}). Using bounded value.")
                 
                 # Compute normalization factor from bounded log determinant
                 log_normalization = -0.5 * (self.dim * np.log(2 * np.pi) + logdet)

@@ -118,18 +118,14 @@ class ChatCLI:
         # Get adaptation controller if available
         self.adaptation_controller = getattr(self.model_patcher, "adaptation_controller", None)
         
+        if os.path.exists("hsa_states"):
+            self._load_saved_state()
+        
         # Chat history
         self.chat_history = []
     
     def generate_response(self, prompt: str) -> str:
-        """Generate a response using the model with HSA attention.
-        
-        Args:
-            prompt: The input prompt
-            
-        Returns:
-            The generated response
-        """
+        """Generate a response using the model with HSA attention."""
         # Add the prompt to the history
         self.chat_history.append({"role": "user", "content": prompt})
         
@@ -139,11 +135,15 @@ class ChatCLI:
         # Tokenize input
         inputs = self.tokenizer(full_prompt, return_tensors="pt", padding=True)
         
+        # Ensure attention mask is explicitly set
+        attention_mask = inputs.attention_mask
+        
         # Generate response
         with torch.no_grad():
-            # Generate with HSA
+            # Generate with HSA and explicit attention mask
             outputs = self.model.generate(
                 inputs.input_ids,
+                attention_mask=attention_mask,  # Explicitly pass the attention mask
                 max_length=self.max_length,
                 temperature=self.temperature,
                 do_sample=True,
@@ -294,20 +294,86 @@ class ChatCLI:
     
     def _save_state(self):
         """Save the current HSA state."""
-        from hsa.serialization_core import HSASerializer
+        import os
+        import json
         
         try:
+            # Import the necessary components
+            from hsa.serialization_formats import save_to_file
+            from hsa.serialization_core import HSASerializer
+            
+            # Create output directory if it doesn't exist
+            output_dir = "hsa_states"
+            os.makedirs(output_dir, exist_ok=True)
+            
             # Create serializer
             serializer = HSASerializer()
             
             # Save registry
-            filename = f"hsa_state_{int(time.time())}.bin"
-            serializer.save_to_file(self.registry, filename)
+            filename = os.path.join(output_dir, f"hsa_state_{int(time.time())}.bin")
+            save_to_file(serializer, self.registry, filename, format="binary")
+            
+            # Save metadata about the most recent save
+            metadata = {"latest_save": filename}
+            with open(os.path.join(output_dir, "metadata.json"), "w") as f:
+                json.dump(metadata, f)
             
             print(f"HSA state saved to {filename}")
         except Exception as e:
             print(f"Error saving state: {e}")
-    
+            import traceback
+            print(traceback.format_exc())
+            
+            
+    def _load_saved_state(self):
+        """Load the most recently saved HSA state if available."""
+        import os
+        import json
+        
+        try:
+            # Check for metadata file
+            metadata_path = os.path.join("hsa_states", "metadata.json")
+            if not os.path.exists(metadata_path):
+                logger.info("No saved state metadata found")
+                return False
+            
+            # Read metadata
+            with open(metadata_path, "r") as f:
+                metadata = json.load(f)
+            
+            latest_save = metadata.get("latest_save")
+            if not latest_save or not os.path.exists(latest_save):
+                logger.info(f"Saved state file not found: {latest_save}")
+                return False
+            
+            # Import necessary components
+            from hsa.serialization_core import HSASerializer
+            from hsa.serialization_formats import load_from_file
+            
+            # Create serializer
+            serializer = HSASerializer()
+            
+            # Load registry
+            loaded_registry = load_from_file(serializer, latest_save)
+            
+            # Replace current registry
+            self.registry = loaded_registry
+            
+            # Update model patcher and adaptation controller with new registry
+            if hasattr(self.model_patcher, "registry"):
+                self.model_patcher.registry = loaded_registry
+            
+            if self.adaptation_controller:
+                self.adaptation_controller.registry = loaded_registry
+            
+            logger.info(f"Loaded HSA state from {latest_save}")
+            return True
+        except Exception as e:
+            logger.error(f"Error loading saved state: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+            
     def _reset_hsa(self):
         """Reset HSA to initial state."""
         # Re-initialize registry
