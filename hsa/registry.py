@@ -324,12 +324,19 @@ class SplatRegistry:
             num_splats = self.hierarchy.init_splats_per_level[level_idx]
             splats_by_level[level_name] = []
             
-            for i in range(num_splats):
+            # Track successful and failed attempts for logging
+            success_count = 0
+            failure_count = 0
+            max_attempts = num_splats * 2  # Allow for some failures
+            attempts = 0
+            
+            while success_count < num_splats and attempts < max_attempts:
+                attempts += 1
                 try:
                     # Create initial position - either random or based on tokens
                     if tokens is not None and tokens.shape[0] > 0:
                         # Initialize from tokens - this is a simple strategy, can be improved
-                        idx = i % tokens.shape[0]
+                        idx = attempts % tokens.shape[0]
                         position = tokens[idx].copy()
                         
                         # Add some noise for diversity
@@ -353,11 +360,20 @@ class SplatRegistry:
                     )
                     
                     splats_by_level[level_name].append(splat)
+                    success_count += 1
                     
                 except Exception as e:
                     logger.error(f"Failed to create splat: {e}")
+                    failure_count += 1
                     self.recovery_count += 1
                     continue
+            
+            # Log if we couldn't create enough splats
+            if success_count < num_splats:
+                logger.warning(
+                    f"Could only create {success_count}/{num_splats} splats for level {level_name} "
+                    f"after {attempts} attempts"
+                )
         
         # Now establish parent-child relationships
         for level_idx, level_name in enumerate(self.hierarchy.levels):

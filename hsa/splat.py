@@ -167,23 +167,27 @@ class Splat:
         Returns:
             Stabilized covariance matrix
         """
-        # Test for NaN values for test_stabilize_covariance_fallback
-        if np.isnan(covariance).any():
-            logger.warning("Eigendecomposition failed for covariance matrix. Using fallback method.")
-            return np.eye(self.dim)
-        
         # First ensure the matrix is symmetric (handle numerical errors)
         covariance = 0.5 * (covariance + covariance.T)
         
         try:
+            # Check for NaN or Inf values
+            if np.isnan(covariance).any() or np.isinf(covariance).any():
+                logger.warning("NaN or Inf values in covariance matrix. Using identity matrix.")
+                return np.eye(self.dim)
+            
             # Compute eigendecomposition
             eigenvalues, eigenvectors = np.linalg.eigh(covariance)
             
             # Clip eigenvalues to ensure positive definiteness and good conditioning
+            # Use more conservative bounds to prevent numerical issues
+            min_eigenvalue = 1e-4
+            max_eigenvalue = 1e4
+            
             eigenvalues = np.clip(
                 eigenvalues, 
-                self.MIN_COVARIANCE_EIGENVALUE, 
-                self.MAX_COVARIANCE_EIGENVALUE
+                min_eigenvalue, 
+                max_eigenvalue
             )
             
             # Reconstruct matrix
@@ -202,11 +206,15 @@ class Splat:
             # Replace NaN or Inf values with zeros
             covariance = np.nan_to_num(covariance, nan=0.0, posinf=1.0, neginf=-1.0)
             # Add to diagonal
-            stabilized = covariance + np.eye(self.dim) * self.MIN_COVARIANCE_EIGENVALUE
+            stabilized = covariance + np.eye(self.dim) * 1e-3
             # Ensure symmetric
             stabilized = 0.5 * (stabilized + stabilized.T)
             return stabilized
-    
+        except Exception as e:
+            # If any other error occurs, log it and return identity matrix
+            logger.error(f"Unexpected error in stabilize_covariance: {e}. Using identity matrix.")
+            return np.eye(self.dim)
+
     def _update_cached_values(self):
         """Update cached computation values for performance."""
         try:
@@ -216,32 +224,47 @@ class Splat:
                 min_eig = np.min(np.linalg.eigvalsh(self.covariance))
                 if min_eig <= 0:
                     logger.warning("Covariance matrix not positive definite. Adding to diagonal.")
-                    self.covariance = self.covariance + np.eye(self.dim) * max(1e-5, -min_eig + 1e-5)
+                    self.covariance = self.covariance + np.eye(self.dim) * max(1e-4, -min_eig + 1e-4)
             except np.linalg.LinAlgError:
                 logger.warning("Eigenvalue computation failed. Stabilizing covariance.")
                 self.covariance = self._stabilize_covariance(self.covariance)
                 
-            # Inverse of covariance matrix
-            self.covariance_inverse = np.linalg.inv(self.covariance)
+            # Inverse of covariance matrix - use more robust inversion
+            try:
+                # Try with standard inversion
+                self.covariance_inverse = np.linalg.inv(self.covariance)
+            except np.linalg.LinAlgError:
+                # Try with pseudo-inverse if regular inverse fails
+                logger.warning("Matrix inversion failed. Using pseudo-inverse.")
+                self.covariance_inverse = np.linalg.pinv(self.covariance)
             
             # Normalization factor for Gaussian: 1/sqrt((2π)^d * det(Σ))
-            det = np.linalg.det(self.covariance)
-            if det <= 0:
-                # This should not happen after stabilization, but just in case
-                logger.warning(f"Non-positive determinant ({det}) after stabilization. Adding to diagonal.")
-                self.covariance = self.covariance + np.eye(self.dim) * 1e-4
-                det = np.linalg.det(self.covariance)
-                self.covariance_inverse = np.linalg.inv(self.covariance)
+            # Use more numerically stable method to compute determinant
+            try:
+                # Compute log determinant instead of raw determinant to avoid overflow/underflow
+                log_det = np.linalg.slogdet(self.covariance)[1]
                 
-            self.normalization_factor = 1.0 / np.sqrt((2 * np.pi) ** self.dim * det)
+                # Check if log determinant is too extreme
+                if log_det < -50:  # Very small determinant
+                    logger.warning(f"Very small determinant (log_det={log_det}). Using safe value.")
+                    self.normalization_factor = 1.0
+                elif log_det > 50:  # Very large determinant
+                    logger.warning(f"Very large determinant (log_det={log_det}). Using safe value.")
+                    self.normalization_factor = 1e-10
+                else:
+                    # Normal case - compute normalization_factor from log determinant
+                    self.normalization_factor = 1.0 / np.sqrt((2 * np.pi) ** self.dim * np.exp(log_det))
+            except Exception as e:
+                logger.warning(f"Error computing determinant: {e}. Using fallback normalization.")
+                self.normalization_factor = 1.0 / np.sqrt((2 * np.pi) ** self.dim)
             
         except Exception as e:
             # Last resort fallback
             logger.error(f"Failed to update cached values: {e}. Using identity matrix.")
             self.covariance = np.eye(self.dim)
             self.covariance_inverse = np.eye(self.dim)
-            self.normalization_factor = 1.0 / np.sqrt((2 * np.pi) ** self.dim)
-    
+            self.normalization_factor = 1.0 / np.sqrt((2 * np.pi) ** self.dim)    
+        
     def compute_distance(self, token_a: np.ndarray, token_b: np.ndarray) -> float:
         """Compute the Mahalanobis distance between two tokens through this splat.
         
