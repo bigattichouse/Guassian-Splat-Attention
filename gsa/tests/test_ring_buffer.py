@@ -459,6 +459,32 @@ def test_trend_analysis_error_handling():
         np.sum = orig_sum
 
 
+def test_trend_analysis_minimal_data():
+    """Test trend analysis with minimal data points."""
+    buffer = RingBuffer(5)
+    
+    # Test with single value
+    buffer.append(1.0)
+    trend = buffer.trend_analysis()
+    assert trend['stable'] is True
+    
+    # Test with two values that are identical
+    buffer.clear()
+    buffer.append(1.0)
+    buffer.append(1.0)
+    trend = buffer.trend_analysis()
+    assert trend['stable'] is True
+    assert abs(trend['slope']) < 1e-6
+    
+    # Test with two values that are different
+    buffer.clear()
+    buffer.append(1.0)
+    buffer.append(2.0)
+    trend = buffer.trend_analysis()
+    assert trend['increasing'] is True
+    assert trend['slope'] > 0
+
+
 def test_decay_values():
     """Test applying exponential decay to values."""
     buffer = RingBuffer(3)
@@ -560,3 +586,121 @@ def test_weighted_average_edge_cases():
         assert np.isfinite(avg)
     finally:
         globals()['sum'] = orig_sum
+
+
+def test_weighted_average_complex_weights():
+    """Test weighted average with more complex weight patterns."""
+    buffer = RingBuffer(4)
+    
+    buffer.append(1.0)
+    buffer.append(2.0)
+    buffer.append(3.0)
+    buffer.append(4.0)
+    
+    # Test with zero weights for some elements
+    weights = [0.0, 0.0, 1.0, 1.0]
+    avg = buffer.weighted_average(weights=weights)
+    assert avg == 3.5  # (3*1 + 4*1)/(1+1)
+    
+    # Test with negative weights (should be handled gracefully)
+    weights = [-1.0, -2.0, 3.0, 4.0]
+    avg = buffer.weighted_average(weights=weights)
+    # We should get a result, but exact behavior depends on implementation
+    assert np.isfinite(avg)
+
+
+# New tests to improve coverage on lines 242-248, 263, 341-343
+
+def test_trend_analysis_exception_early():
+    """Test trend analysis with an exception early in the method."""
+    buffer = RingBuffer(3)
+    buffer.append(1.0)
+    buffer.append(2.0)
+    
+    # Mock np.mean to raise an exception
+    orig_mean = np.mean
+    def mock_mean(*args, **kwargs):
+        raise RuntimeError("Mock mean error")
+    
+    np.mean = mock_mean
+    
+    try:
+        trend = buffer.trend_analysis()
+        
+        # Verify default values from the exception handler
+        assert trend['increasing'] is False
+        assert trend['decreasing'] is False
+        assert trend['stable'] is True
+        assert trend['slope'] == 0.0
+    finally:
+        # Restore original function
+        np.mean = orig_mean
+        
+def test_decay_values_with_buffer_exception():
+    """Test decay_values with an element that raises an exception during multiplication."""
+    buffer = RingBuffer(3)
+    
+    # Create a custom class that raises an exception when multiplied
+    class ErrorOnMultiply(float):
+        def __rmul__(self, other):
+            raise RuntimeError("Error on multiply")
+        
+        def __mul__(self, other):
+            raise RuntimeError("Error on multiply")
+    
+    # Add normal values first
+    buffer.append(1.0)
+    buffer.append(ErrorOnMultiply(2.0))
+    
+    # This should handle the exception without crashing
+    buffer.decay_values(0.5)
+    
+    # Just assert that we reached this point without an exception
+    assert True
+
+def test_weighted_average_with_weights_exception():
+    """Test weighted_average when weights cause an exception."""
+    buffer = RingBuffer(3)
+    buffer.append(1.0)
+    buffer.append(2.0)
+    
+    # Create weights that will cause an error when used
+    class BadWeights(list):
+        def __iter__(self):
+            raise RuntimeError("Bad weights iterator")
+    
+    # This should hit lines 341-343 in the exception handler
+    avg = buffer.weighted_average(weights=BadWeights([1.0, 2.0]))
+    
+    # Should fall back to simple average
+    assert avg == 1.5  # (1.0 + 2.0) / 2
+
+
+def test_weighted_average_with_exception_in_calculation():
+    """Test weighted_average with an exception during the calculation."""
+    buffer = RingBuffer(3)
+    
+    # Add normal values first
+    buffer.append(1.0)
+    buffer.append(2.0)
+    
+    # Create an object that will cause multiplication to fail
+    class ErrorValue(float):
+        def __new__(cls):
+            return float.__new__(cls, 3.0)
+            
+        def __mul__(self, other):
+            raise TypeError("Cannot multiply ErrorValue")
+        
+        def __rmul__(self, other):
+            raise TypeError("Cannot multiply ErrorValue")
+    
+    # Replace one of the values directly in the buffer
+    buffer.buffer[1] = ErrorValue()
+    
+    # This should hit lines 341-343 in the exception handler
+    avg = buffer.weighted_average()
+    
+    # Verify we get some valid result without error
+    assert isinstance(avg, float)
+    assert np.isfinite(avg)

@@ -4,6 +4,7 @@ Tests for the Splat implementation.
 
 import pytest
 import torch
+import sys
 import numpy as np
 from gsa.splat import Splat
 from gsa.numeric_utils import generate_random_covariance
@@ -69,6 +70,27 @@ def test_splat_initialization_with_invalid_covariance():
         Splat(position, covariance)
 
 
+def test_normalization_factor_extreme_eigenvalues():
+    """Test normalization factor computation with extreme eigenvalues."""
+    embedding_dim = 3
+    position = torch.zeros(embedding_dim)
+    
+    # Create a covariance matrix with extremely small eigenvalues
+    small_eig_cov = torch.eye(embedding_dim) * 1e-10
+    
+    # Create a covariance matrix with extremely large eigenvalues
+    large_eig_cov = torch.eye(embedding_dim) * 1e10
+    
+    # Both should create valid splats with finite normalization factors
+    splat_small = Splat(position, small_eig_cov)
+    splat_large = Splat(position, large_eig_cov)
+    
+    assert torch.isfinite(splat_small.normalization_factor)
+    assert torch.isfinite(splat_large.normalization_factor)
+    assert splat_small.normalization_factor > 0
+    assert splat_large.normalization_factor > 0
+
+
 def test_compute_normalization_factor():
     """Test computation of normalization factor."""
     embedding_dim = 3
@@ -113,7 +135,7 @@ def test_compute_normalization_factor():
         torch.linalg.slogdet = orig_slogdet
     
     def mock_slogdet_extreme_large(*args, **kwargs):
-        return torch.tensor(1.0), torch.tensor(100.0)
+        return torch.tensor(1.0), torch.tensor(100.0)  # Very large value
     
     torch.linalg.slogdet = mock_slogdet_extreme_large
     
@@ -146,6 +168,35 @@ def test_compute_normalization_factor():
         torch.pi = orig_pi
 
 
+def test_non_finite_normalization_factor():
+    """Test handling of non-finite normalization factor."""
+    embedding_dim = 3
+    position = torch.zeros(embedding_dim)
+    covariance = torch.eye(embedding_dim)
+    splat = Splat(position, covariance)
+    
+    # Create a patch to force normalization factor to be non-finite
+    orig_exp = torch.exp
+    
+    def mock_exp(x):
+        if isinstance(x, torch.Tensor) and x.numel() == 1:
+            return torch.tensor(float('nan'), device=x.device)
+        return orig_exp(x)
+    
+    # Apply the patch
+    torch.exp = mock_exp
+    
+    try:
+        # Force recomputation of normalization factor with non-finite result
+        splat._compute_normalization_factor()
+        # This should trigger the fallback code on lines 120-121
+        assert torch.isfinite(splat.normalization_factor)
+        assert splat.normalization_factor > 0
+    finally:
+        # Restore original function
+        torch.exp = orig_exp
+
+
 def test_compute_attention(sample_splat, embedding_dim):
     """Test attention computation between two tokens."""
     token_a = torch.randn(embedding_dim)
@@ -161,7 +212,7 @@ def test_compute_attention(sample_splat, embedding_dim):
 def test_compute_attention_special_cases():
     """Test attention computation for special cases."""
     # Test the 2D special case
-    embedding_dim = 2  # Fixed the typo
+    embedding_dim = 2
     position = torch.zeros(embedding_dim)
     covariance = torch.eye(embedding_dim)
     splat = Splat(position, covariance)
@@ -266,6 +317,33 @@ def test_compute_attention_batch_special_cases():
         torch.matmul = orig_matmul
 
 
+def test_compute_attention_batch_with_errors():
+    """Test batch attention computation with various error conditions."""
+    embedding_dim = 4
+    position = torch.zeros(embedding_dim)
+    covariance = torch.eye(embedding_dim)
+    splat = Splat(position, covariance)
+    
+    # Test vectorized computation with error in sum
+    orig_sum = torch.sum
+    
+    def mock_sum(*args, **kwargs):
+        if len(args) > 0 and torch.is_tensor(args[0]):
+            if args[0].dim() > 1:  # Only intercept the weighted_deltas * deltas sum
+                raise RuntimeError("Simulated sum error")
+        return orig_sum(*args, **kwargs)
+    
+    torch.sum = mock_sum
+    
+    try:
+        batch = torch.randn(15, embedding_dim)  # Large enough for vectorized path
+        attention_matrix = splat.compute_attention_batch(batch)
+        assert attention_matrix.shape == (15, 15)
+        assert torch.allclose(attention_matrix, torch.zeros(15, 15))  # Should return zeros on error
+    finally:
+        torch.sum = orig_sum
+
+
 def test_update_activation(sample_splat):
     """Test updating activation history."""
     sample_splat.update_activation(0.5)
@@ -287,6 +365,26 @@ def test_update_activation_non_finite():
     
     assert len(splat.activation_history) == 2
     assert splat.get_average_activation() == 0.0  # Both values should be replaced with 0.0
+
+
+def test_activation_non_finite_tracking():
+    """Test handling of non-finite activation values in activation_history."""
+    embedding_dim = 4
+    position = torch.zeros(embedding_dim)
+    covariance = torch.eye(embedding_dim)
+    splat = Splat(position, covariance)
+    
+    # Create an activation value that is not a finite number
+    non_finite_value = float('nan')
+    
+    # This should use the error handling in update_activation
+    splat.update_activation(non_finite_value)
+    
+    # Get the activation history and confirm it contains a finite value
+    values = splat.activation_history.get_values()
+    assert len(values) == 1
+    assert np.isfinite(values[0])
+    assert values[0] == 0.0  # Non-finite values should be replaced with 0.0
 
 
 def test_get_average_activation_empty():
@@ -379,6 +477,25 @@ def test_update_parameters_error_handling():
     
     # Restore original method
     splat._compute_normalization_factor = orig_ensure_pd
+
+
+def test_update_parameters_invalid_combinations():
+    """Test parameter updates with invalid combinations of inputs."""
+    embedding_dim = 4
+    position = torch.zeros(embedding_dim)
+    covariance = torch.eye(embedding_dim)
+    splat = Splat(position, covariance)
+    
+    # Test with completely invalid covariance that can't be fixed
+    # This should trigger the error path where ensure_positive_definite also fails
+    invalid_cov = torch.ones((embedding_dim, embedding_dim)) * float('nan')
+    
+    # Should not raise an exception but handle gracefully
+    splat.update_parameters(covariance=invalid_cov)
+    
+    # The covariance should remain valid
+    assert torch.isfinite(splat.covariance).all()
+    assert torch.isfinite(splat.precision).all()
 
 
 def test_compute_distance_to(embedding_dim):
@@ -506,6 +623,67 @@ def test_from_dict_error_handling():
         Splat.__init__ = orig_init
 
 
+def test_from_dict_complex_error():
+    """Test error handling in from_dict when tensor conversion fails."""
+    # Create a dict with valid structure but will cause tensor conversion to fail
+    data = {
+        'id': 'test_splat',
+        'position': ['not', 'a', 'number'],  # This will fail tensor conversion
+        'covariance': [[1.0, 0.0], [0.0, 1.0]],
+        'amplitude': 1.0
+    }
+    
+    # Force tensor conversion to raise an error that triggers line 388
+    orig_tensor = torch.tensor
+    
+    def mock_tensor(*args, **kwargs):
+        if isinstance(args[0], list) and not isinstance(args[0][0], (int, float)):
+            raise ValueError("Cannot convert strings to tensor")
+        return orig_tensor(*args, **kwargs)
+    
+    torch.tensor = mock_tensor
+    
+    try:
+        # This should create a fallback splat
+        splat = Splat.from_dict(data)
+        
+        # Verify we got a fallback splat
+        assert splat is not None
+        assert splat.id == 'test_splat'
+        assert splat.position.shape[0] > 0  # Should create some position
+        assert splat.covariance.shape[0] == splat.position.shape[0]  # Matching dims
+    finally:
+        torch.tensor = orig_tensor
+
+
+def test_splat_dict_serialization_round_trip():
+    """Test a complete round-trip serialization to dict and back."""
+    embedding_dim = 5
+    position = torch.randn(embedding_dim)
+    covariance = generate_random_covariance(embedding_dim)
+    amplitude = 0.7
+    splat_id = "test_round_trip"
+    
+    original = Splat(position, covariance, amplitude, splat_id=splat_id)
+    
+    # Add some activation history
+    for i in range(5):
+        original.update_activation(0.1 * i)
+    
+    # Convert to dict
+    data = original.to_dict()
+    
+    # Convert back to splat
+    reconstructed = Splat.from_dict(data)
+    
+    # Verify key properties match
+    assert reconstructed.id == original.id
+    assert torch.allclose(reconstructed.position, original.position)
+    assert torch.allclose(reconstructed.covariance, original.covariance)
+    assert reconstructed.amplitude == original.amplitude
+    assert reconstructed.get_average_activation() == 0.0  # Activation history doesn't round-trip
+
+
 def test_repr(sample_splat):
     """Test string representation of splat."""
     # Update the activation to make it predictable
@@ -526,3 +704,54 @@ def test_repr(sample_splat):
         activation_str = activation_str[:-4]
     
     assert activation_str in repr_str.replace('.000', '').replace('.0', '')
+    
+def test_compute_attention_general_exception():
+    """Test the exception handler in compute_attention (lines 173-176)."""
+    embedding_dim = 4
+    position = torch.zeros(embedding_dim)
+    covariance = torch.eye(embedding_dim)
+    splat = Splat(position, covariance)
+    
+    # Create tokens that will trigger calculation but not special cases
+    token_a = torch.ones(embedding_dim)
+    token_b = torch.ones(embedding_dim) * 2.0
+    
+    # Instead of trying to patch functions, let's corrupt the internal state
+    # Set precision matrix to NaN to force computation to fail
+    splat.precision = torch.tensor(float('nan')) * splat.precision
+    
+    # This should now trigger the exception handler in compute_attention
+    attention = splat.compute_attention(token_a, token_b)
+    
+    # Verify the error handling behavior
+    assert attention == 0.0
+    assert splat.activation_history[-1] == 0.0
+            
+def test_clone_copies_activation_history():
+    """Test that clone properly copies activation history."""
+    embedding_dim = 4
+    position = torch.zeros(embedding_dim)
+    covariance = torch.eye(embedding_dim)
+    splat = Splat(position, covariance)
+    
+    # Add some activation values
+    activation_values = [0.1, 0.2, 0.3, 0.4, 0.5]
+    for value in activation_values:
+        splat.update_activation(value)
+    
+    # Verify original has the correct activation history
+    assert len(splat.activation_history) == len(activation_values)
+    assert splat.activation_history.get_values() == activation_values
+    
+    # Clone the splat
+    clone = splat.clone()
+    
+    # Verify the clone has the same activation history
+    # This will only pass if line 388 is executed
+    assert len(clone.activation_history) == len(activation_values)
+    assert clone.activation_history.get_values() == activation_values
+    
+    # Change activation in original and verify it doesn't affect clone
+    splat.update_activation(0.9)
+    assert len(splat.activation_history) == len(activation_values) + 1
+    assert len(clone.activation_history) == len(activation_values)

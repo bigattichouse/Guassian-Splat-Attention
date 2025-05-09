@@ -143,6 +143,32 @@ def test_is_positive_definite_with_nan_inf(matrix_with_nan_inf):
         torch.linalg.eigvalsh = orig_eigvalsh
 
 
+def test_is_positive_definite_both_methods_fail():
+    """Test when both Cholesky and eigenvalue checks fail."""
+    matrix = torch.tensor([[1.0, 0.5], [0.5, 1.0]])
+    
+    # Mock both Cholesky and eigvalsh to fail
+    orig_cholesky = torch.linalg.cholesky
+    orig_eigvalsh = torch.linalg.eigvalsh
+    
+    def mock_cholesky(*args, **kwargs):
+        raise RuntimeError("Simulated Cholesky error")
+        
+    def mock_eigvalsh(*args, **kwargs):
+        raise RuntimeError("Simulated eigenvalue error")
+    
+    torch.linalg.cholesky = mock_cholesky
+    torch.linalg.eigvalsh = mock_eigvalsh
+    
+    try:
+        # Should return False when both checks fail
+        assert not is_positive_definite(matrix)
+    finally:
+        # Restore original functions
+        torch.linalg.cholesky = orig_cholesky
+        torch.linalg.eigvalsh = orig_eigvalsh
+
+
 def test_stable_matrix_inverse_singular(singular_matrix):
     """Test stable inversion of singular matrices."""
     inverse = stable_matrix_inverse(singular_matrix)
@@ -289,6 +315,33 @@ def test_compute_gaussian():
     except Exception as e:
         # If there's an error, it might still be acceptable as this is an edge case
         assert "Error in compute_gaussian" in str(e)
+
+
+def test_compute_gaussian_high_dim():
+    """Test Gaussian computation with high dimensionality."""
+    # Create high-dimensional vectors to test the alternative computation path
+    dim = 20  # This should be high enough to trigger the alternative path
+    x = torch.randn(dim)
+    mean = torch.randn(dim)
+    precision = torch.eye(dim)
+    
+    result = compute_gaussian(x, mean, precision)
+    assert result >= 0.0
+    assert torch.isfinite(result)
+    
+    # Test the error path in the high-dimensional case
+    orig_mv = torch.mv
+    
+    def mock_mv(*args, **kwargs):
+        raise RuntimeError("Simulated matrix-vector multiplication error")
+    
+    torch.mv = mock_mv
+    
+    try:
+        result = compute_gaussian(x, mean, precision)
+        assert result == 0.0  # Should fallback to 0.0 on error
+    finally:
+        torch.mv = orig_mv
 
 
 def test_bounded_amplitude():
@@ -804,3 +857,28 @@ def test_compute_log_det(sample_matrix, non_positive_definite_matrix, singular_m
         assert logdet == -50.0  # Should return fallback value
     finally:
         torch.linalg.slogdet = orig_slogdet
+
+
+def test_compute_log_det_no_positive_eigenvalues():
+    """Test log determinant when there are no positive eigenvalues."""
+    # Create a mock for eigenvalues that returns all negative values
+    matrix = torch.zeros((3, 3))  # Determinant is zero
+    
+    orig_slogdet = torch.linalg.slogdet
+    orig_eigvalsh = torch.linalg.eigvalsh
+    
+    def mock_slogdet(*args, **kwargs):
+        return torch.tensor(-1.0), torch.tensor(0.0)
+    
+    def mock_eigvalsh(*args, **kwargs):
+        return torch.tensor([-1.0, -2.0, -3.0])
+    
+    torch.linalg.slogdet = mock_slogdet
+    torch.linalg.eigvalsh = mock_eigvalsh
+    
+    try:
+        logdet = compute_log_det(matrix)
+        assert logdet == -100.0  # Should return the lower bound
+    finally:
+        torch.linalg.slogdet = orig_slogdet
+        torch.linalg.eigvalsh = orig_eigvalsh

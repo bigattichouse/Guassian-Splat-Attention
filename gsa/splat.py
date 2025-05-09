@@ -471,3 +471,5 @@ class Splat:
         return (f"Splat(id={self.id}, "
                 f"amplitude={self.amplitude:.3f}, "
                 f"activation={self.get_average_activation():.3f})")
+                
+
