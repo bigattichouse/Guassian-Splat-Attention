@@ -755,3 +755,34 @@ def test_clone_copies_activation_history():
     splat.update_activation(0.9)
     assert len(splat.activation_history) == len(activation_values) + 1
     assert len(clone.activation_history) == len(activation_values)
+    
+def test_compute_attention_exception_path():
+    """Test the exception handler in compute_attention by directly forcing an exception."""
+    embedding_dim = 4
+    position = torch.zeros(embedding_dim)
+    covariance = torch.eye(embedding_dim)
+    splat = Splat(position, covariance)
+    
+    # Create a fake tensor class that has the device attribute but will cause exceptions
+    class FakeTensor:
+        def __init__(self):
+            self.device = torch.device('cpu')  # This is what the exception handler needs
+        
+        # Define methods that will raise exceptions when called during computation
+        def __sub__(self, other):
+            raise RuntimeError("Test exception in subtraction")
+        
+        def __repr__(self):
+            return "FakeTensor()"
+    
+    # Create our fake tensor and a valid tensor
+    fake_token = FakeTensor()
+    valid_token = torch.ones(embedding_dim)
+    
+    # This should trigger the exception handler in compute_attention
+    attention = splat.compute_attention(fake_token, valid_token)
+    
+    # Check that error handling worked correctly
+    assert attention == 0.0
+    assert len(splat.activation_history) > 0
+    assert splat.activation_history[-1] == 0.0
