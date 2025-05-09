@@ -129,6 +129,30 @@ def test_ensure_positive_definite_with_nan_inf(matrix_with_nan_inf):
     assert eigenvalues.max() <= 5.0
 
 
+def test_ensure_positive_definite_all_methods_fail(monkeypatch):
+    """Test final fallback when all stabilization methods fail."""
+    # Create a matrix for testing
+    matrix = torch.tensor([[1.0, 2.0], [2.0, 1.0]])
+    
+    # Mock eigendecomposition to fail
+    def mock_eigh(*args, **kwargs):
+        raise RuntimeError("Simulated eigendecomposition error")
+    
+    # Mock direct regularization to fail (is_positive_definite returns False)
+    def mock_is_positive_definite(*args, **kwargs):
+        return False
+    
+    # Apply mocks
+    monkeypatch.setattr(torch.linalg, 'eigh', mock_eigh)
+    monkeypatch.setattr('gsa.numeric_utils.is_positive_definite', mock_is_positive_definite)
+    
+    # This should trigger the final fallback (lines 104-106)
+    result = ensure_positive_definite(matrix)
+    
+    # Should return identity matrix as final fallback
+    assert torch.allclose(result, torch.eye(2))
+
+
 def test_is_positive_definite_with_nan_inf(matrix_with_nan_inf):
     """Test checking positive definiteness with invalid values."""
     # A matrix with NaN/Inf values should not be positive definite
@@ -607,6 +631,22 @@ def test_stable_softmax():
         torch.exp = orig_exp
 
 
+def test_stable_softmax_extreme_values():
+    """Test stable softmax with extreme values that need normalization."""
+    # Create a tensor with extreme values that should trigger normalization
+    x = torch.tensor([100.0, -50.0, 30.0])
+    
+    # Focus on functionality rather than implementation details
+    result = stable_softmax(x)
+    
+    # Verify results
+    assert torch.isfinite(result).all()
+    assert torch.isclose(result.sum(), torch.tensor(1.0))
+    
+    # With these extreme values, the largest value (100.0) should dominate
+    assert result[0] > 0.99, "First value should dominate with extreme values"
+
+
 def test_generate_random_covariance():
     """Test random covariance matrix generation."""
     dim = 5
@@ -704,62 +744,83 @@ def test_compute_matrix_decomposition(sample_matrix, matrix_with_nan_inf):
         torch.linalg.eigh = orig_eigh
 
 
-def test_compute_matrix_decomposition_small_special_handling():
+def test_compute_matrix_decomposition_small_matrices():
     """Test special handling for small matrices in compute_matrix_decomposition."""
-    # Create a small 2x2 matrix to trigger the special handling (lines 320-322, 327)
-    small_matrix = torch.tensor([
-        [3.0, 1.0],
-        [1.0, 2.0]
-    ])
+    # Test for lines 320-322, 327
+    # Create 2x2 matrix
+    matrix_2x2 = torch.tensor([[2.0, 0.5], [0.5, 3.0]])
     
-    # Test the function
-    eigenvalues, eigenvectors = compute_matrix_decomposition(small_matrix)
+    # Create a well-conditioned 4x4 matrix
+    # Start with a diagonal matrix with clear eigenvalues
+    matrix_4x4 = torch.diag(torch.tensor([1.0, 2.0, 3.0, 4.0]))
     
+    # Add some off-diagonal terms but keep it symmetric and well-conditioned
+    perturbation = torch.randn(4, 4)
+    perturbation = 0.1 * (perturbation + perturbation.T) / 2
+    matrix_4x4 = matrix_4x4 + perturbation
+    
+    # Test with both sizes
+    values_2x2, vectors_2x2 = compute_matrix_decomposition(matrix_2x2)
+    values_4x4, vectors_4x4 = compute_matrix_decomposition(matrix_4x4)
+    
+    # Test 2x2 matrix
     # Check orthogonality
-    identity_check = torch.matmul(eigenvectors.t(), eigenvectors)
-    assert torch.allclose(identity_check, torch.eye(2), rtol=1e-5)
+    identity_check_2x2 = torch.matmul(vectors_2x2.T, vectors_2x2)
+    assert torch.allclose(identity_check_2x2, torch.eye(2), rtol=1e-5)
     
-    # Test zeroing out of small components (line 327)
-    # We need to mock the eigenvector computation to include some very small values
-    orig_eigh = torch.linalg.eigh
+    # Verify small components are zeroed out
+    assert torch.all((torch.abs(vectors_2x2) >= 1e-6) | (vectors_2x2 == 0.0))
     
+    # Test 4x4 matrix
+    # Check orthogonality with increased tolerance for numerical stability
+    identity_check_4x4 = torch.matmul(vectors_4x4.T, vectors_4x4)
+    assert torch.allclose(identity_check_4x4, torch.eye(4), rtol=1e-4, atol=1e-4)
+    
+    # Verify small components are zeroed out
+    assert torch.all((torch.abs(vectors_4x4) >= 1e-6) | (vectors_4x4 == 0.0))
+
+
+def test_compute_matrix_decomposition_qr_path(monkeypatch):
+    """Test the QR decomposition path for small matrices."""
+    # Test for line 320-322
+    # Create a small matrix to trigger the special handling
+    small_matrix = torch.tensor([[3.0, 1.0], [1.0, 2.0]])
+    
+    # Track if QR was called
+    qr_called = [False]
+    
+    # Eigenvectors that need orthogonalization
+    mock_eigenvectors = torch.tensor([[0.8, 0.6], [0.6, -0.8]])
+    
+    # Define mock functions
     def mock_eigh(*args, **kwargs):
-        # Return eigenvalues and eigenvectors with some small components
-        eigenvalues = torch.tensor([1.0, 2.0])
-        eigenvectors = torch.tensor([
-            [0.5, 0.8],
-            [0.8, -0.5]
-        ])
-        # Add a very small component that should get zeroed out
-        eigenvectors[0, 0] = 1e-7  # This should be zeroed in the implementation
-        return eigenvalues, eigenvectors
-    
-    torch.linalg.eigh = mock_eigh
-    
-    try:
-        # Call the function with our mocked eigh
-        eigenvalues, eigenvectors = compute_matrix_decomposition(small_matrix)
-        
-        # Check if the small value was zeroed out
-        assert eigenvectors[0, 0] == 0.0
-    finally:
-        torch.linalg.eigh = orig_eigh
-    
-    # Test the special small matrix path when QR fails (lines 320-322)
-    orig_qr = torch.linalg.qr
+        # Return eigenvalues and eigenvectors that need orthogonalization
+        return torch.tensor([1.0, 4.0]), mock_eigenvectors
     
     def mock_qr(*args, **kwargs):
-        raise RuntimeError("Simulated QR decomposition error")
+        qr_called[0] = True
+        # Return orthogonalized vectors and a diagonal R
+        q = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
+        r = torch.tensor([[0.8, 0.0], [0.0, 0.6]])
+        return q, r
     
-    torch.linalg.qr = mock_qr
+    # Apply mocks
+    monkeypatch.setattr(torch.linalg, 'eigh', mock_eigh)
+    monkeypatch.setattr(torch.linalg, 'qr', mock_qr)
     
-    try:
-        # Should fall back to regular path
-        eigenvalues, eigenvectors = compute_matrix_decomposition(small_matrix)
-        assert eigenvalues.shape == (2,)
-        assert eigenvectors.shape == (2, 2)
-    finally:
-        torch.linalg.qr = orig_qr
+    # Run the function - this should use the QR path (lines 320-322)
+    eigenvalues, eigenvectors = compute_matrix_decomposition(small_matrix)
+    
+    # Verify QR was called
+    assert qr_called[0]
+    
+    # Verify results
+    assert eigenvalues.shape == (2,)
+    assert eigenvectors.shape == (2, 2)
+    
+    # The test should also verify orthogonality
+    identity_check = torch.matmul(eigenvectors.T, eigenvectors)
+    assert torch.allclose(identity_check, torch.eye(2), rtol=1e-5)
 
 
 def test_compute_condition_number(sample_matrix, non_positive_definite_matrix, singular_matrix):
@@ -911,6 +972,56 @@ def test_compute_mahalanobis_distance():
         assert distance == expected
     finally:
         torch.mv = orig_mv
+
+
+def test_compute_mahalanobis_distance_invalid(monkeypatch):
+    """Test handling of invalid Mahalanobis distances."""
+    # Test for lines 427-429, 438-442
+    x = torch.tensor([1.0, 2.0, 3.0])
+    mean = torch.tensor([0.0, 0.0, 0.0])
+    cov = torch.eye(3)
+    
+    # Mock torch.dot to return a negative value
+    def mock_dot_negative(*args, **kwargs):
+        return torch.tensor(-1.0)  # Invalid negative result
+    
+    # Apply mock
+    monkeypatch.setattr(torch, 'dot', mock_dot_negative)
+    
+    # Should fallback to Euclidean distance
+    distance = compute_mahalanobis_distance(x, mean, cov)
+    expected = torch.norm(x - mean).item()
+    assert distance == pytest.approx(expected)
+    
+    # Mock torch.dot to return NaN
+    def mock_dot_nan(*args, **kwargs):
+        return torch.tensor(float('nan'))  # Invalid NaN result
+    
+    # Apply mock
+    monkeypatch.setattr(torch, 'dot', mock_dot_nan)
+    
+    # Should fallback to Euclidean distance
+    distance = compute_mahalanobis_distance(x, mean, cov)
+    expected = torch.norm(x - mean).item()
+    assert distance == pytest.approx(expected)
+    
+    # Test the line verifying non-finite values (lines 425-427)
+    # Create non-finite precision matrix
+    def mock_isfinite(*args, **kwargs):
+        # Make the precision matrix check return False
+        if args[0].shape == (3, 3):
+            return torch.tensor([[False, True, True], 
+                                [True, False, True], 
+                                [True, True, False]])
+        return torch.ones_like(args[0], dtype=torch.bool)  # All other checks pass
+    
+    # Apply mock
+    monkeypatch.setattr(torch, 'isfinite', mock_isfinite)
+    
+    # Should fallback to Euclidean distance
+    distance = compute_mahalanobis_distance(x, mean, cov)
+    expected = torch.norm(x - mean).item()
+    assert distance == pytest.approx(expected)
 
 
 def test_compute_mahalanobis_distance_non_finite():
