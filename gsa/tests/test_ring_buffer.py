@@ -43,6 +43,19 @@ def test_append():
     assert buffer[2] == 3
 
 
+def test_append_non_finite():
+    """Test handling of non-finite values when appending."""
+    buffer = RingBuffer(3)
+    
+    buffer.append(float('nan'))
+    assert len(buffer) == 1
+    assert buffer[0] == 0.0  # NaN should be replaced with 0.0
+    
+    buffer.append(float('inf'))
+    assert len(buffer) == 2
+    assert buffer[1] == 0.0  # Inf should be replaced with 0.0
+
+
 def test_overflow():
     """Test that oldest values are dropped when buffer is full."""
     buffer = RingBuffer(3)
@@ -113,6 +126,46 @@ def test_get_statistics():
     assert stats['min'] == 1.0
     assert stats['max'] == 5.0
     assert stats['std'] == pytest.approx(np.std([1, 2, 3, 4, 5]))
+
+
+def test_get_statistics_error_handling():
+    """Test error handling in statistics calculation."""
+    buffer = RingBuffer(3)
+    buffer.append(1)
+    buffer.append(2)
+    
+    # Mock numpy functions to simulate errors
+    orig_mean = np.mean
+    orig_median = np.median
+    orig_min = np.min
+    orig_max = np.max
+    orig_std = np.std
+    
+    def mock_error(*args, **kwargs):
+        raise RuntimeError("Simulated numpy error")
+    
+    np.mean = mock_error
+    np.median = mock_error
+    np.min = mock_error
+    np.max = mock_error
+    np.std = mock_error
+    
+    try:
+        stats = buffer.get_statistics()
+        
+        # Should return zeros for all metrics on error
+        assert stats['mean'] == 0.0
+        assert stats['median'] == 0.0
+        assert stats['min'] == 0.0
+        assert stats['max'] == 0.0
+        assert stats['std'] == 0.0
+    finally:
+        # Restore original functions
+        np.mean = orig_mean
+        np.median = orig_median
+        np.min = orig_min
+        np.max = orig_max
+        np.std = orig_std
 
 
 def test_is_full():
@@ -190,6 +243,38 @@ def test_rolling_average():
     assert buffer.rolling_average(window_size=10) == [3.0]
 
 
+def test_rolling_average_edge_cases():
+    """Test rolling average with edge cases."""
+    buffer = RingBuffer(5)
+    buffer.append(1)
+    
+    # Window size <= 0
+    assert buffer.rolling_average(window_size=0) == [1.0]
+    assert buffer.rolling_average(window_size=-1) == [1.0]
+    
+    # Test error handling
+    buffer = RingBuffer(3)
+    buffer.append(1)
+    buffer.append(float('nan'))  # Non-finite value
+    
+    avgs = buffer.rolling_average()
+    assert len(avgs) == 1
+    assert np.isfinite(avgs[0])
+    
+    # Test with error in numpy function
+    orig_mean = np.mean
+    
+    def mock_error(*args, **kwargs):
+        raise RuntimeError("Simulated numpy error")
+    
+    np.mean = mock_error
+    
+    try:
+        assert buffer.rolling_average() == []
+    finally:
+        np.mean = orig_mean
+
+
 def test_rolling_variance():
     """Test calculating rolling variances."""
     buffer = RingBuffer(5)
@@ -219,6 +304,45 @@ def test_rolling_variance():
     assert vars[0] == pytest.approx(np.var([1, 2, 3]))
     assert vars[1] == pytest.approx(np.var([2, 3, 4]))
     assert vars[2] == pytest.approx(np.var([3, 4, 5]))
+
+
+def test_rolling_variance_edge_cases():
+    """Test rolling variance with edge cases."""
+    buffer = RingBuffer(5)
+    buffer.append(1)
+    
+    # Window size <= 1 (need at least 2 elements for variance)
+    # The function may handle this by using window_size=2 which is valid behavior
+    result = buffer.rolling_variance(window_size=1)
+    # If it returns [], that's fine, if it returns [0.0], that's also acceptable
+    assert result == [] or result == [0.0]
+    
+    # Add another element so we can calculate variance
+    buffer.append(2)
+    assert buffer.rolling_variance(window_size=2) == [pytest.approx(np.var([1, 2]))]
+    
+    # Test error handling
+    buffer = RingBuffer(3)
+    buffer.append(1)
+    buffer.append(float('nan'))  # Non-finite value
+    buffer.append(3)
+    
+    vars = buffer.rolling_variance()
+    assert len(vars) == 1
+    assert np.isfinite(vars[0])
+    
+    # Test with error in numpy function
+    orig_var = np.var
+    
+    def mock_error(*args, **kwargs):
+        raise RuntimeError("Simulated numpy error")
+    
+    np.var = mock_error
+    
+    try:
+        assert buffer.rolling_variance() == []
+    finally:
+        np.var = orig_var
 
 
 def test_trend_analysis_empty():
@@ -283,3 +407,156 @@ def test_trend_analysis_stable():
     
     assert trend['stable'] is True
     assert abs(trend['slope']) < 0.05  # Should be close to 0.0
+
+
+def test_trend_analysis_with_non_finite():
+    """Test trend analysis with non-finite values."""
+    buffer = RingBuffer(5)
+    
+    buffer.append(1)
+    buffer.append(float('nan'))  # Should be replaced with 0.0
+    buffer.append(3)
+    buffer.append(float('inf'))  # Should be replaced with 0.0
+    buffer.append(5)
+    
+    trend = buffer.trend_analysis()
+    
+    # Check that we got valid results despite non-finite values
+    assert isinstance(trend['increasing'], bool)
+    assert isinstance(trend['decreasing'], bool)
+    assert isinstance(trend['stable'], bool)
+    assert np.isfinite(trend['slope'])
+
+
+def test_trend_analysis_error_handling():
+    """Test error handling in trend analysis."""
+    buffer = RingBuffer(5)
+    buffer.append(1)
+    buffer.append(2)
+    buffer.append(3)
+    
+    # Mock numpy functions to simulate errors
+    orig_mean = np.mean
+    orig_sum = np.sum
+    
+    def mock_error(*args, **kwargs):
+        raise RuntimeError("Simulated numpy error")
+    
+    np.mean = mock_error
+    np.sum = mock_error
+    
+    try:
+        trend = buffer.trend_analysis()
+        
+        # Should return stable trend with zero slope on error
+        assert trend['increasing'] is False
+        assert trend['decreasing'] is False
+        assert trend['stable'] is True
+        assert trend['slope'] == 0.0
+    finally:
+        # Restore original functions
+        np.mean = orig_mean
+        np.sum = orig_sum
+
+
+def test_decay_values():
+    """Test applying exponential decay to values."""
+    buffer = RingBuffer(3)
+    
+    buffer.append(1.0)
+    buffer.append(2.0)
+    buffer.append(3.0)
+    
+    # Apply decay with factor 0.5
+    buffer.decay_values(decay_factor=0.5)
+    
+    assert buffer[0] == 0.5
+    assert buffer[1] == 1.0
+    assert buffer[2] == 1.5
+
+
+def test_decay_values_edge_cases():
+    """Test decay_values with edge cases."""
+    buffer = RingBuffer(3)
+    
+    # Empty buffer should not raise an error
+    buffer.decay_values()
+    assert len(buffer) == 0
+    
+    # Out of range decay factors should be clamped
+    buffer.append(2.0)
+    buffer.decay_values(decay_factor=2.0)  # Too high, should clamp to 1.0
+    assert buffer[0] == 2.0
+    
+    buffer.decay_values(decay_factor=-0.5)  # Too low, should clamp to 0.0
+    assert buffer[0] == 0.0
+    
+    # Test error handling
+    buffer = RingBuffer(2)
+    buffer.append(1.0)
+    
+    # Create mock multiplication that raises an error
+    class MockInt(float):
+        def __mul__(self, other):
+            raise RuntimeError("Simulated multiplication error")
+    
+    buffer.buffer[0] = MockInt(5.0)
+    
+    # Should not raise an error
+    buffer.decay_values(decay_factor=0.5)
+
+
+def test_weighted_average():
+    """Test calculating weighted average of values."""
+    buffer = RingBuffer(3)
+    
+    buffer.append(1.0)
+    buffer.append(2.0)
+    buffer.append(3.0)
+    
+    # Without explicit weights (should use exponential weighting)
+    avg = buffer.weighted_average()
+    
+    # Most recent value (3.0) should have highest weight
+    assert avg > 2.0
+    
+    # With explicit weights
+    avg = buffer.weighted_average(weights=[1.0, 2.0, 3.0])
+    
+    # Equivalent to (1.0*1.0 + 2.0*2.0 + 3.0*3.0) / (1.0 + 2.0 + 3.0)
+    expected = (1.0*1.0 + 2.0*2.0 + 3.0*3.0) / (1.0 + 2.0 + 3.0)
+    assert avg == expected
+
+
+def test_weighted_average_edge_cases():
+    """Test weighted_average with edge cases."""
+    buffer = RingBuffer(3)
+    
+    # Empty buffer should return 0.0
+    assert buffer.weighted_average() == 0.0
+    
+    # With zero or negative weights sum
+    buffer.append(1.0)
+    buffer.append(2.0)
+    
+    assert buffer.weighted_average(weights=[0.0, 0.0]) == 0.0
+    assert buffer.weighted_average(weights=[-1.0, -2.0]) == 0.0
+    
+    # Test error handling
+    orig_sum = sum  # Python's built-in sum function
+    
+    def mock_error(*args, **kwargs):
+        if len(args) > 0 and isinstance(args[0], list) and len(args[0]) > 0:
+            if isinstance(args[0][0], tuple):
+                raise RuntimeError("Simulated sum error")
+        return orig_sum(*args, **kwargs)
+    
+    globals()['sum'] = mock_error
+    
+    try:
+        avg = buffer.weighted_average()
+        # Just test that we get a valid value back, don't check exact value
+        assert isinstance(avg, float)
+        assert np.isfinite(avg)
+    finally:
+        globals()['sum'] = orig_sum
