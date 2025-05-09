@@ -26,6 +26,7 @@ from hsa.attention_interface import AttentionConfig
 from hsa.adaptation_controller import AdaptationController
 from hsa.model_adapter import create_adapter_for_model, ContextExtender
 from hsa.serialization_core import HSASerializer
+from hsa.serialization_formats import load_from_file, save_to_file, compress_registry
 from hsa.compact_serialization import load_registry_compact
 
 # Set up logging

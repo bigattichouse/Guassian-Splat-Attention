@@ -332,3 +332,18 @@ class HSASerializer:
         buffer = base64.b64decode(data["data"])
         
         return np.frombuffer(buffer, dtype=dtype).reshape(shape)
+        
+    def save_to_file(self, registry, path, format="binary"):
+        """Save a registry to a file."""
+        from serialization_formats import save_to_file
+        return save_to_file(self, registry, path, format)
+    
+    def load_from_file(self, path):
+        """Load a registry from a file."""
+        from serialization_formats import load_from_file
+        return load_from_file(self, path)
+    
+    def compress_registry(self, registry):
+        """Compress a registry to a minimal representation."""
+        from serialization_formats import compress_registry
+        return compress_registry(self, registry)
