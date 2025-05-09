@@ -419,6 +419,8 @@ def compute_matrix_decomposition(matrix):
                         
             # One more check for orthogonality
             if torch.allclose(identity_check, torch.eye(n, device=matrix.device), rtol=1e-5):
+                # Zero out extremely small components that should be zero
+                orthogonal_vecs[torch.abs(orthogonal_vecs) < 1e-6] = 0.0
                 return eigenvalues, orthogonal_vecs
         
         # Zero out extremely small components that should be zero
