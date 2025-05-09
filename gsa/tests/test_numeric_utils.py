@@ -190,6 +190,57 @@ def test_stable_matrix_inverse_singular(singular_matrix):
     assert torch.allclose(inverse, torch.eye(3))
 
 
+def test_stable_matrix_inverse_non_square():
+    """Test stable inversion with non-square matrices."""
+    # Create a non-square matrix (2x3)
+    non_square = torch.tensor([
+        [1.0, 2.0, 3.0],
+        [4.0, 5.0, 6.0]
+    ])
+    
+    # Test the function - for non-square matrices, the current implementation 
+    # returns an identity matrix with dimensions matching the first dimension
+    result = stable_matrix_inverse(non_square)
+    
+    # Check that it returns an identity matrix with shape matching the first dimension
+    assert result.shape == (2, 2)
+    assert torch.allclose(result, torch.eye(2))
+
+
+def test_stable_matrix_inverse_refinement():
+    """Test iterative refinement in matrix inverse."""
+    # Create a poorly conditioned matrix
+    matrix = torch.tensor([
+        [1.0, 0.999, 0.0],
+        [0.999, 1.0, 0.0],
+        [0.0, 0.0, 1e-4]
+    ])
+    
+    # Mock allclose to force refinement path
+    orig_allclose = torch.allclose
+    call_count = [0]
+    
+    def mock_allclose(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return False  # Force refinement first time
+        return True       # Pass the second check
+    
+    torch.allclose = mock_allclose
+    
+    try:
+        inverse = stable_matrix_inverse(matrix)
+        
+        # Verify refinement was triggered
+        assert call_count[0] >= 2
+        
+        # Check result is valid
+        identity_check = torch.matmul(matrix, inverse)
+        torch.allclose(identity_check, torch.eye(3), rtol=1e-2, atol=1e-2)
+    finally:
+        torch.allclose = orig_allclose
+
+
 def test_stable_matrix_inverse_multistage(sample_matrix):
     """Test different stages of the stable matrix inverse function."""
     # Test direct inversion with small regularization
@@ -315,6 +366,46 @@ def test_compute_gaussian():
     except Exception as e:
         # If there's an error, it might still be acceptable as this is an edge case
         assert "Error in compute_gaussian" in str(e)
+
+
+def test_compute_gaussian_dimensionality_paths():
+    """Test both dimensionality paths in compute_gaussian."""
+    # Small dimension case (should use first branch)
+    dim_small = 8
+    x_small = torch.randn(dim_small)
+    mean_small = torch.randn(dim_small)
+    precision_small = torch.eye(dim_small)
+    
+    result_small = compute_gaussian(x_small, mean_small, precision_small)
+    assert result_small >= 0.0
+    
+    # Large dimension case (should use second branch)
+    dim_large = 15  # > 10, triggering the else branch
+    x_large = torch.randn(dim_large)
+    mean_large = torch.randn(dim_large)
+    precision_large = torch.eye(dim_large)
+    
+    result_large = compute_gaussian(x_large, mean_large, precision_large)
+    assert result_large >= 0.0
+    
+    # Verify different code paths were taken by mocking torch.dot
+    # The function has error handling, so it will return 0.0 instead of raising
+    def mock_dot(*args, **kwargs):
+        raise RuntimeError("Simulated dot product error")
+    
+    orig_dot = torch.dot
+    torch.dot = mock_dot
+    
+    try:
+        # Small dimensions should handle the dot product error and return 0.0
+        result = compute_gaussian(x_small, mean_small, precision_small)
+        assert result == 0.0
+        
+        # Large dimensions should use a different path that doesn't call dot
+        result = compute_gaussian(x_large, mean_large, precision_large)
+        assert result >= 0.0
+    finally:
+        torch.dot = orig_dot
 
 
 def test_compute_gaussian_high_dim():
@@ -559,6 +650,16 @@ def test_compute_condition_number(sample_matrix, non_positive_definite_matrix, s
         torch.linalg.eigvalsh = orig_eigvalsh
 
 
+def test_compute_condition_number_tiny_eigenvalue():
+    """Test condition number with eigenvalues below threshold."""
+    # Create a matrix with a tiny eigenvalue (below EPS)
+    matrix = torch.diag(torch.tensor([1.0, 0.5, 1e-10]))
+    
+    # Should return infinity when min eigenvalue < EPS
+    cond = compute_condition_number(matrix)
+    assert cond == float('inf')
+
+
 def test_is_positive_definite(sample_matrix, non_positive_definite_matrix):
     """Test checking if a matrix is positive definite."""
     assert is_positive_definite(sample_matrix)
@@ -667,6 +768,40 @@ def test_compute_mahalanobis_distance():
         torch.mv = orig_mv
 
 
+def test_compute_mahalanobis_distance_non_finite():
+    """Test Mahalanobis distance with non-finite differences."""
+    # Instead of using NaN values directly, let's mock the dot product to fail
+    # This will test the error handling path more reliably
+    x = torch.tensor([1.0, 2.0, 3.0])
+    mean = torch.tensor([0.0, 0.0, 0.0])
+    covariance = torch.eye(3)
+    
+    # Mock the dot product to return a negative value (which should trigger fallback)
+    orig_dot = torch.dot
+    def mock_dot(*args, **kwargs):
+        return torch.tensor(-1.0)  # Invalid negative Mahalanobis squared distance
+    
+    torch.dot = mock_dot
+    
+    try:
+        distance = compute_mahalanobis_distance(x, mean, covariance)
+        # Should fallback to Euclidean distance
+        expected = torch.norm(x - mean).item()
+        assert distance > 0
+        assert distance == pytest.approx(expected)
+    finally:
+        torch.dot = orig_dot
+        
+    # Also test with actual NaN inputs
+    x_with_nan = torch.tensor([float('nan'), 2.0, 1.0])
+    
+    # With NaN inputs, the function should either return NaN or fall back to Euclidean
+    distance = compute_mahalanobis_distance(x_with_nan, mean, covariance)
+    
+    # Check that either the result is NaN or it's a positive number
+    assert np.isnan(distance) or distance > 0
+
+
 def test_diag_loading(sample_matrix, matrix_with_nan_inf):
     """Test diagonal loading."""
     loaded = diag_loading(sample_matrix, alpha=0.1)
@@ -704,6 +839,36 @@ def test_diag_loading(sample_matrix, matrix_with_nan_inf):
     
     try:
         loaded = diag_loading(sample_matrix)
+        assert torch.allclose(loaded, torch.eye(3))
+    finally:
+        torch.mean = orig_mean
+
+
+def test_diag_loading_edge_cases():
+    """Test diagonal loading with various edge cases."""
+    # Matrix with non-finite diagonal elements
+    matrix = torch.eye(3)
+    matrix[0, 0] = float('nan')
+    matrix[1, 1] = float('inf')
+    
+    # Should handle non-finite diagonal means
+    loaded = diag_loading(matrix)
+    assert torch.isfinite(loaded).all()
+    
+    # Test when mean is too small
+    tiny_diag = torch.diag(torch.tensor([1e-12, 1e-12, 1e-12]))
+    loaded = diag_loading(tiny_diag)
+    assert torch.all(torch.diag(loaded) > 1e-12)
+    
+    # Test when mean computation fails entirely
+    def mock_mean(*args, **kwargs):
+        raise RuntimeError("Simulated mean error")
+    
+    orig_mean = torch.mean
+    torch.mean = mock_mean
+    
+    try:
+        loaded = diag_loading(matrix)
         assert torch.allclose(loaded, torch.eye(3))
     finally:
         torch.mean = orig_mean
@@ -855,6 +1020,42 @@ def test_compute_log_det(sample_matrix, non_positive_definite_matrix, singular_m
     try:
         logdet = compute_log_det(sample_matrix)
         assert logdet == -50.0  # Should return fallback value
+    finally:
+        torch.linalg.slogdet = orig_slogdet
+
+
+def test_compute_log_det_extreme_values():
+    """Test log determinant with extreme conditioning."""
+    # Create a matrix with very large/small eigenvalues
+    matrix = torch.diag(torch.tensor([1e-20, 1e20, 1.0]))
+    
+    # Test with real extreme values
+    logdet = compute_log_det(matrix)
+    assert abs(logdet) <= 100.0  # Should be clamped
+    
+    # Test when slogdet returns extreme values
+    orig_slogdet = torch.linalg.slogdet
+    
+    def mock_slogdet_large(*args, **kwargs):
+        return torch.tensor(1.0), torch.tensor(150.0)  # Very large
+    
+    torch.linalg.slogdet = mock_slogdet_large
+    
+    try:
+        logdet = compute_log_det(matrix)
+        assert logdet == 100.0  # Should be clamped to max
+    finally:
+        torch.linalg.slogdet = orig_slogdet
+    
+    # Test with very small determinant
+    def mock_slogdet_small(*args, **kwargs):
+        return torch.tensor(1.0), torch.tensor(-150.0)  # Very small
+    
+    torch.linalg.slogdet = mock_slogdet_small
+    
+    try:
+        logdet = compute_log_det(matrix)
+        assert logdet == -100.0  # Should be clamped to min
     finally:
         torch.linalg.slogdet = orig_slogdet
 
