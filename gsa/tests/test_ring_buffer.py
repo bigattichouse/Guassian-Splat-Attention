@@ -704,3 +704,77 @@ def test_weighted_average_with_exception_in_calculation():
     # Verify we get some valid result without error
     assert isinstance(avg, float)
     assert np.isfinite(avg)
+    
+def test_trend_analysis_non_finite_filtering():
+    """Test trend analysis with NaN and Inf values that need filtering."""
+    buffer = RingBuffer(5)
+    
+    # Add regular values
+    buffer.append(1.0)
+    buffer.append(2.0)
+    buffer.append(3.0)
+    buffer.append(4.0)
+    buffer.append(5.0)
+    
+    # Inject NaN and Inf directly into the buffer to bypass the filtering in append
+    buffer.buffer[1] = float('nan')
+    buffer.buffer[3] = float('inf')
+    
+    # This should trigger the filtering code path
+    trend = buffer.trend_analysis()
+    
+    # Verify we get valid results
+    assert trend['increasing'] is True  # Based on the filtered sequence [1.0, 3.0, 5.0]
+    assert np.isfinite(trend['slope'])
+    
+    # Test case where after filtering, only one value remains
+    buffer = RingBuffer(3)
+    buffer.append(1.0)
+    buffer.append(2.0)
+    buffer.append(3.0)
+    
+    # Make all but one value non-finite
+    buffer.buffer[0] = float('nan')
+    buffer.buffer[1] = float('inf')
+    
+    trend = buffer.trend_analysis()
+    
+    # With insufficient data, should return default values
+    assert trend['increasing'] is False
+    assert trend['decreasing'] is False
+    assert trend['stable'] is True
+    assert trend['slope'] == 0.0
+
+def test_trend_analysis_zero_denominator():
+    """Test trend analysis when the denominator in slope calculation is zero."""
+    buffer = RingBuffer(3)
+    
+    buffer.append(1.0)
+    buffer.append(1.0)
+    buffer.append(1.0)
+    
+    # Original np.sum function
+    original_sum = np.sum
+    sum_call_count = 0
+    
+    # Mock to make the denominator calculation return 0
+    def mock_sum(*args, **kwargs):
+        nonlocal sum_call_count
+        sum_call_count += 1
+        
+        # The second call to np.sum in trend_analysis is for the denominator
+        if sum_call_count == 2:
+            return 0.0
+        
+        return original_sum(*args, **kwargs)
+    
+    np.sum = mock_sum
+    
+    try:
+        trend = buffer.trend_analysis()
+        
+        # With zero denominator, slope should be 0
+        assert trend['slope'] == 0.0
+        assert trend['stable'] is True
+    finally:
+        np.sum = original_sum
