@@ -8,6 +8,7 @@ transformer models with Hierarchical Splat Attention.
 import os
 import logging
 from typing import Dict, List, Optional, Tuple, Any, Union, Callable
+import inspect
 
 import numpy as np
 import torch
@@ -220,8 +221,18 @@ class ModelPatcher:
                 
                 try:
                     # Check if this is a terminal module (not a container)
-                    if not list(module.children()):
-                        self._patch_module(name, module)
+                    # Skip Linear layers that are used in projections
+                    if isinstance(module, nn.Linear):
+                        logger.debug(f"Skipping Linear layer: {name}")
+                        continue
+                    
+                    # Skip modules that are clearly sub-components
+                    skip_patterns = ['q_proj', 'k_proj', 'v_proj', 'out_proj', 'dense']
+                    if any(pattern in name.split('.')[-1] for pattern in skip_patterns):
+                        logger.debug(f"Skipping sub-component: {name}")
+                        continue
+                    
+                    self._patch_module(name, module)
                 except Exception as e:
                     logger.warning(f"Failed to patch module {name}: {e}")
         
@@ -364,7 +375,9 @@ class ModelPatcher:
         """Generic patching for unknown model types."""
         original_forward = module.forward
         
-        # We'll need to inspect the signature of the original forward method
+        # Get original method signature
+        sig = inspect.signature(original_forward)
+        
         def patched_forward(*args, **kwargs):
             # Try to identify query, key, value from args/kwargs
             query = None
@@ -391,16 +404,51 @@ class ModelPatcher:
             # If we couldn't extract the necessary tensors, fall back to original
             if query is None:
                 logger.warning(f"Falling back to original attention for {name} - couldn't extract inputs")
+                try:
+                    # For modules that expect specific arg patterns, be more careful
+                    if isinstance(module, nn.Linear):
+                        if len(args) > 0:
+                            return original_forward(args[0])
+                        elif 'input' in kwargs:
+                            return original_forward(kwargs['input'])
+                        elif len(kwargs) == 1:
+                            return original_forward(list(kwargs.values())[0])
+                    
+                    # Default fallback
+                    return original_forward(*args, **kwargs)
+                except Exception as e:
+                    logger.error(f"Error calling original forward: {e}")
+                    # Last resort - try with first arg only
+                    if len(args) > 0:
+                        return original_forward(args[0])
+                    return original_forward(**kwargs)
+            
+            try:
+                # Forward to HSA module
+                output, attention_weights = hsa_module(query, key, value, attention_mask)
+                
+                # Try to match original return signature
+                try:
+                    sample_result = None
+                    # Safely sample return type without modifying args
+                    if len(sig.parameters) <= 2 and len(args) > 0:
+                        # For simple functions like Linear
+                        sample_result = original_forward(args[0])
+                    else:
+                        # Try to infer return type without actually calling
+                        pass
+                    
+                    if sample_result is not None and isinstance(sample_result, tuple):
+                        return (output, attention_weights)
+                    else:
+                        return output
+                except Exception:
+                    # If sampling fails, default to returning just the output
+                    return output
+            except Exception as e:
+                logger.warning(f"Error in HSA processing: {e}. Falling back to original.")
+                # Fall back to original in case of error
                 return original_forward(*args, **kwargs)
-            
-            # Forward to HSA module
-            output, attention_weights = hsa_module(query, key, value, attention_mask)
-            
-            # Try to match original return signature
-            if isinstance(original_forward(*args, **kwargs), tuple):
-                return (output, attention_weights)
-            else:
-                return output
         
         # Replace the forward method
         module.forward = patched_forward.__get__(module, type(module))

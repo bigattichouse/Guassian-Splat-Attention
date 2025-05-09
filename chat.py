@@ -185,12 +185,13 @@ class HSAInference:
         full_prompt = self._format_conversation()
         
         # Tokenize input
-        inputs = self.tokenizer(full_prompt, return_tensors="pt", padding=True)
+        inputs = self.tokenizer(full_prompt, return_tensors="pt")
         
         # Move inputs to the same device as the model
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        input_ids = inputs["input_ids"].to(self.device)
+        attention_mask = inputs["attention_mask"].to(self.device) if "attention_mask" in inputs else None
         
-        input_length = len(inputs.input_ids[0])
+        input_length = len(input_ids[0])
         
         # Calculate appropriate max_new_tokens value
         max_context = getattr(self.model.config, "max_position_embeddings", 1024)
@@ -204,12 +205,12 @@ class HSAInference:
             start_time = time.time()
             
             outputs = self.model.generate(
-                inputs.input_ids,
+                input_ids,
                 max_new_tokens=max_new_tokens,
                 temperature=self.temperature,
                 do_sample=True,
                 pad_token_id=self.tokenizer.pad_token_id,
-                attention_mask=inputs.attention_mask
+                attention_mask=attention_mask
             )
             
             generation_time = time.time() - start_time
