@@ -13,6 +13,7 @@ import inspect
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from transformers import PreTrainedModel
 
 # Import HSA components
@@ -60,11 +61,14 @@ class HSAAttention(nn.Module):
         else:
             self.embed_dim = adapter_config.get("embed_dim", 768)
         
-        # Set up projections if needed (similar to original module)
-        self.q_proj = self._get_or_create_projection("q_proj")
-        self.k_proj = self._get_or_create_projection("k_proj")
-        self.v_proj = self._get_or_create_projection("v_proj")
-        self.out_proj = self._get_or_create_projection("out_proj")
+        # Use original projections if they exist
+        if self.config.get("use_projections", True):
+            self.q_proj = self._get_or_create_projection("q_proj")
+            self.k_proj = self._get_or_create_projection("k_proj")
+            self.v_proj = self._get_or_create_projection("v_proj")
+            self.out_proj = self._get_or_create_projection("out_proj")
+        else:
+            self.q_proj = self.k_proj = self.v_proj = self.out_proj = None
         
         # Attention dropout
         self.dropout = nn.Dropout(adapter_config.get("dropout", 0.1))
@@ -102,15 +106,68 @@ class HSAAttention(nn.Module):
         Returns:
             Tuple of (output, attention_weights)
         """
-        # Project inputs if needed
-        if self.config.get("use_projections", True):
+        # Handle different input shapes - support both [batch, seq_len, hidden] and [seq_len, batch, hidden]
+        input_shape = query.shape
+        
+        # Standard shape for HSA: [batch_size, seq_len, embed_dim]
+        if len(input_shape) == 3 and input_shape[2] == self.embed_dim:
+            # [batch, seq_len, hidden] - standard shape, no reshape needed
+            batch_size, seq_len, _ = input_shape
+        elif len(input_shape) == 3 and input_shape[1] == self.embed_dim:
+            # [seq_len, batch, hidden] - need to transpose
+            seq_len, batch_size, _ = input_shape
+            query = query.transpose(0, 1)
+            key = key.transpose(0, 1) if key is not None else None
+            value = value.transpose(0, 1) if value is not None else None
+        else:
+            # Unsupported shape
+            logger.warning(f"Unsupported input shape: {input_shape}")
+            # Try to handle it anyway
+            if len(input_shape) >= 2:
+                batch_size = input_shape[0]
+                seq_len = input_shape[1]
+            else:
+                # Really problematic case
+                batch_size = 1
+                seq_len = input_shape[0] if len(input_shape) > 0 else 1
+        
+        # Project inputs if using projections
+        if self.config.get("use_projections", True) and self.q_proj is not None:
+            # Ensure we're working with tensors
+            if not isinstance(query, torch.Tensor):
+                logger.warning(f"Query is not a tensor, got {type(query)}")
+                # Try to convert or fallback
+                if hasattr(query, "hidden_states") and isinstance(query.hidden_states, torch.Tensor):
+                    query = query.hidden_states
+                else:
+                    # Can't proceed with non-tensor
+                    logger.error(f"Cannot process non-tensor query: {type(query)}")
+                    return query, None
+            
+            # Normal projection
             query = self.q_proj(query)
-            key = self.k_proj(key)
-            value = self.v_proj(value)
+            key = self.k_proj(key) if key is not None else self.k_proj(query)
+            value = self.v_proj(value) if value is not None else self.v_proj(query)
+        else:
+            # If no projections, ensure we have key and value
+            key = query if key is None else key
+            value = query if value is None else value
+        
+        # Ensure we're working with tensors
+        if not isinstance(query, torch.Tensor) or not isinstance(key, torch.Tensor) or not isinstance(value, torch.Tensor):
+            logger.error(f"After projection, inputs must be tensors. Got: query={type(query)}, key={type(key)}, value={type(value)}")
+            # Try to use original module as fallback
+            if self.original_module is not None and hasattr(self.original_module, "forward"):
+                logger.warning("Falling back to original module forward")
+                try:
+                    return self.original_module.forward(query, key, value, attn_mask, **kwargs)
+                except Exception as e:
+                    logger.error(f"Original module fallback failed: {e}")
+            # Last resort fallback
+            return query, None
         
         # Convert to numpy for HSA computation
         tokens_np = query.detach().cpu().numpy()
-        batch_size, seq_len, embed_dim = tokens_np.shape
         
         # Update stats
         self.attention_stats["calls"] += 1
@@ -129,8 +186,29 @@ class HSAAttention(nn.Module):
             
             # Apply mask if provided
             if attn_mask is not None:
-                mask = attn_mask[batch_idx].detach().cpu().numpy()
-                attention_matrix = attention_matrix * mask
+                mask_np = None
+                # Handle different mask shapes
+                if attn_mask.dim() == 2:
+                    # Global mask for all batches
+                    mask_np = attn_mask.detach().cpu().numpy()
+                elif attn_mask.dim() == 3 and attn_mask.size(0) == batch_size:
+                    # Batch-specific mask
+                    mask_np = attn_mask[batch_idx].detach().cpu().numpy()
+                
+                if mask_np is not None:
+                    # Expand mask if needed
+                    if mask_np.shape[0] != seq_len or mask_np.shape[1] != seq_len:
+                        # Try to reshape/broadcast
+                        if mask_np.shape[0] == 1 and mask_np.shape[1] == seq_len:
+                            # Broadcast single row mask
+                            mask_np = np.tile(mask_np, (seq_len, 1))
+                        elif mask_np.shape[0] == seq_len and mask_np.shape[1] == 1:
+                            # Broadcast single column mask
+                            mask_np = np.tile(mask_np, (1, seq_len))
+                    
+                    # Apply mask (element-wise multiplication)
+                    if mask_np.shape == attention_matrix.shape:
+                        attention_matrix = attention_matrix * mask_np
             
             # Convert back to tensor
             attention_tensor = torch.from_numpy(attention_matrix).to(value.device)
@@ -146,11 +224,16 @@ class HSAAttention(nn.Module):
         attn_weights = torch.stack(attention_weights) if self.config.get("return_attention_weights", False) else None
         
         # Apply output projection if needed
-        if self.config.get("use_projections", True):
+        if self.config.get("use_projections", True) and self.out_proj is not None:
             output = self.out_proj(output)
         
         # Apply dropout
         output = self.dropout(output)
+        
+        # Reshape output to match original input shape if needed
+        if len(input_shape) == 3 and input_shape[1] == self.embed_dim:
+            # Need to transpose back to [seq_len, batch, hidden]
+            output = output.transpose(0, 1)
         
         return output, attn_weights
 
@@ -185,8 +268,11 @@ class ModelPatcher:
         self.patched_modules = {}
         
         # Different model families have different module structures
-        self.model_type = model.config.model_type
+        self.model_type = getattr(model.config, "model_type", "unknown")
         logger.info(f"Detected model type: {self.model_type}")
+        
+        # Adaptation controller (set externally)
+        self.adaptation_controller = None
         
         # Determine patching strategy
         self._identify_attention_modules()
@@ -194,47 +280,65 @@ class ModelPatcher:
     def _identify_attention_modules(self):
         """Identify attention modules to patch based on model type."""
         # Define patterns for different model types
-        # This would need to be expanded for more model families
         if self.model_type == "gpt2":
             self.attention_patterns = [".attn"]
         elif self.model_type == "bert":
             self.attention_patterns = [".attention.self"]
         elif self.model_type == "roberta":
             self.attention_patterns = [".attention.self"]
-        elif "gpt_neox" in self.model_type:
-            self.attention_patterns = [".attention"]
+        elif "gpt_neo" in self.model_type:
+            self.attention_patterns = [".attn"]
         elif "llama" in self.model_type:
             self.attention_patterns = [".self_attn"]
         elif "opt" in self.model_type:
             self.attention_patterns = [".self_attn"]
+        elif "t5" in self.model_type:
+            self.attention_patterns = [".SelfAttention", ".EncDecAttention"]
         else:
             # Generic fallback - look for attention in name
-            self.attention_patterns = ["attention"]
+            self.attention_patterns = ["attention", "attn"]
             logger.warning(f"Using generic pattern for unknown model type: {self.model_type}")
     
     def patch_model(self):
         """Patch the model by replacing attention modules with HSA."""
         # Find all modules matching our patterns
+        modules_to_patch = []
+        
         for name, module in self.model.named_modules():
             if any(pattern in name for pattern in self.attention_patterns):
-                logger.info(f"Found attention module: {name}")
+                # Skip Linear layers that are used in projections
+                if isinstance(module, nn.Linear):
+                    logger.debug(f"Skipping Linear layer: {name}")
+                    continue
                 
-                try:
-                    # Check if this is a terminal module (not a container)
-                    # Skip Linear layers that are used in projections
-                    if isinstance(module, nn.Linear):
-                        logger.debug(f"Skipping Linear layer: {name}")
-                        continue
-                    
-                    # Skip modules that are clearly sub-components
-                    skip_patterns = ['q_proj', 'k_proj', 'v_proj', 'out_proj', 'dense']
-                    if any(pattern in name.split('.')[-1] for pattern in skip_patterns):
-                        logger.debug(f"Skipping sub-component: {name}")
-                        continue
-                    
-                    self._patch_module(name, module)
-                except Exception as e:
-                    logger.warning(f"Failed to patch module {name}: {e}")
+                # Skip modules that are clearly sub-components
+                skip_patterns = ['q_proj', 'k_proj', 'v_proj', 'out_proj', 'dense']
+                if any(pattern in name.split('.')[-1] for pattern in skip_patterns):
+                    logger.debug(f"Skipping sub-component: {name}")
+                    continue
+                
+                logger.info(f"Found attention module to patch: {name}")
+                modules_to_patch.append((name, module))
+        
+        # Sometimes we find nested modules - filter to get only the outermost ones
+        filtered_modules = []
+        for name, module in modules_to_patch:
+            # Check if this module is a parent of any other module
+            is_parent = False
+            for other_name, _ in modules_to_patch:
+                if other_name.startswith(name + ".") and other_name != name:
+                    is_parent = True
+                    break
+            
+            if not is_parent:
+                filtered_modules.append((name, module))
+        
+        # Patch modules
+        for name, module in filtered_modules:
+            try:
+                self._patch_module(name, module)
+            except Exception as e:
+                logger.warning(f"Failed to patch module {name}: {e}")
         
         logger.info(f"Patched {len(self.patched_modules)} attention modules with HSA")
     
@@ -262,12 +366,16 @@ class ModelPatcher:
         # Different model families need different patching approaches
         if self.model_type == "gpt2":
             self._patch_gpt2(name, module, hsa_module)
+        elif "gpt_neo" in self.model_type:
+            self._patch_gpt_neo(name, module, hsa_module)
         elif self.model_type in ["bert", "roberta"]:
             self._patch_bert(name, module, hsa_module)
         elif "llama" in self.model_type:
             self._patch_llama(name, module, hsa_module)
         elif "opt" in self.model_type:
             self._patch_opt(name, module, hsa_module)
+        elif "t5" in self.model_type:
+            self._patch_t5(name, module, hsa_module)
         else:
             self._patch_generic(name, module, hsa_module)
         
@@ -279,18 +387,74 @@ class ModelPatcher:
     
     def _patch_gpt2(self, name: str, module: nn.Module, hsa_module: HSAAttention):
         """Patch a GPT-2 attention module."""
-        # For GPT-2, we need to hijack the _attn method which computes the attention scores
+        # For GPT-2, we only replace the _attn method which computes the attention scores
         def patched_attn(self, query, key, value, attention_mask=None, head_mask=None):
             # Forward to HSA module
             output, weights = hsa_module(query, key, value, attention_mask)
             return output, weights
         
         # Replace the _attn method
-        module._attn = patched_attn.__get__(module, type(module))
+        setattr(module, '_attn', patched_attn.__get__(module, type(module)))
+        
+        # Keep the original forward method
+        # This retains all the head splitting/merging logic of the original module
+    
+    def _patch_gpt_neo(self, name: str, module: nn.Module, hsa_module: HSAAttention):
+        """Patch a GPT-Neo attention module."""
+        # Store original _attn method
+        original_attn = getattr(module, '_attn', None)
+        
+        # Create custom _attn method that uses HSA
+        def patched_attn(self, query, key, value, attention_mask=None, head_mask=None):
+            # Forward to HSA module
+            output, weights = hsa_module(query, key, value, attention_mask)
+            return output, weights
+        
+        # Replace the _attn method if it exists
+        if original_attn is not None:
+            setattr(module, '_attn', patched_attn.__get__(module, type(module)))
+        else:
+            # If _attn doesn't exist, we need to patch the forward method
+            original_forward = module.forward
+            
+            def patched_forward(self, *args, **kwargs):
+                # Try to extract inputs
+                # For modules that handle input differently, fall back to original
+                try:
+                    if len(args) >= 3:
+                        hidden_states, attention_mask, layer_past = args[:3]
+                    else:
+                        hidden_states = kwargs.get('hidden_states') or kwargs.get('input')
+                        attention_mask = kwargs.get('attention_mask')
+                        layer_past = kwargs.get('layer_past')
+                        
+                    if not isinstance(hidden_states, torch.Tensor):
+                        # Fall back to original
+                        return original_forward(*args, **kwargs)
+                    
+                    # Use HSA to compute attention
+                    output, weights = hsa_module(hidden_states, hidden_states, hidden_states, attention_mask)
+                    
+                    # Try to match original return format
+                    if isinstance(original_forward(*args, **kwargs), tuple):
+                        # Many modules return (output, weights)
+                        return (output, weights)
+                    else:
+                        # Some just return output
+                        return output
+                except Exception as e:
+                    logger.warning(f"Error in patched forward: {e}, falling back to original")
+                    # Fall back to original
+                    return original_forward(*args, **kwargs)
+            
+            # Replace the forward method
+            module.forward = patched_forward.__get__(module, type(module))
     
     def _patch_bert(self, name: str, module: nn.Module, hsa_module: HSAAttention):
         """Patch a BERT/RoBERTa attention module."""
-        # For BERT family, we usually replace the forward method
+        # For BERT family, we replace the forward method
+        original_forward = module.forward
+        
         def patched_forward(
             self, 
             hidden_states, 
@@ -300,9 +464,9 @@ class ModelPatcher:
             encoder_attention_mask=None, 
             past_key_value=None, 
             output_attentions=False,
+            **kwargs
         ):
             # BERTSelfAttention typically splits hidden_states into Q/K/V
-            # Here we do it manually and then use HSA
             query = key = value = hidden_states
             
             # Forward to HSA module
@@ -316,7 +480,9 @@ class ModelPatcher:
     
     def _patch_llama(self, name: str, module: nn.Module, hsa_module: HSAAttention):
         """Patch a LLaMA attention module."""
-        # For LLaMA, we typically replace the forward method
+        # For LLaMA, we replace the forward method
+        original_forward = module.forward
+        
         def patched_forward(
             self,
             hidden_states,
@@ -347,6 +513,8 @@ class ModelPatcher:
     def _patch_opt(self, name: str, module: nn.Module, hsa_module: HSAAttention):
         """Patch an OPT attention module."""
         # For OPT, similar to others, we replace the forward method
+        original_forward = module.forward
+        
         def patched_forward(
             self,
             hidden_states,
@@ -355,9 +523,12 @@ class ModelPatcher:
             attention_mask=None,
             layer_head_mask=None,
             output_attentions=False,
+            **kwargs
         ):
             # Use hidden_states for Q/K/V
-            query = key = value = hidden_states
+            query = hidden_states
+            key = hidden_states if key_value_states is None else key_value_states
+            value = hidden_states if key_value_states is None else key_value_states
             
             # Forward to HSA module
             output, attention_weights = hsa_module(query, key, value, attention_mask)
@@ -365,6 +536,45 @@ class ModelPatcher:
             outputs = (output,)
             if output_attentions:
                 outputs += (attention_weights,)
+            if past_key_value is not None:
+                outputs += (past_key_value,)
+                
+            return outputs
+        
+        # Replace the forward method
+        module.forward = patched_forward.__get__(module, type(module))
+    
+    def _patch_t5(self, name: str, module: nn.Module, hsa_module: HSAAttention):
+        """Patch a T5 attention module."""
+        # For T5, similar to others, we replace the forward method
+        original_forward = module.forward
+        
+        def patched_forward(
+            self,
+            hidden_states,
+            mask=None,
+            key_value_states=None,
+            position_bias=None,
+            past_key_value=None,
+            layer_head_mask=None,
+            query_length=None,
+            use_cache=False,
+            output_attentions=False,
+            **kwargs
+        ):
+            # Use hidden_states for Q/K/V
+            query = hidden_states
+            key = hidden_states if key_value_states is None else key_value_states
+            value = hidden_states if key_value_states is None else key_value_states
+            
+            # Forward to HSA module
+            output, attention_weights = hsa_module(query, key, value, mask)
+            
+            outputs = (output,)
+            if output_attentions:
+                outputs += (attention_weights,)
+            if use_cache:
+                outputs += (None,)  # No cache when using HSA
                 
             return outputs
         
@@ -379,72 +589,71 @@ class ModelPatcher:
         sig = inspect.signature(original_forward)
         
         def patched_forward(*args, **kwargs):
-            # Try to identify query, key, value from args/kwargs
-            query = None
-            key = None
-            value = None
-            attention_mask = None
-            
-            # Extract from args if available (common pattern)
-            if len(args) >= 3:
-                query, key, value = args[:3]
-                if len(args) >= 4:
-                    attention_mask = args[3]
-            
-            # Extract from common kwarg names
-            if query is None:
-                query = kwargs.get('query', kwargs.get('hidden_states', None))
-            if key is None:
-                key = kwargs.get('key', kwargs.get('key_states', query))
-            if value is None:
-                value = kwargs.get('value', kwargs.get('value_states', key))
-            if attention_mask is None:
-                attention_mask = kwargs.get('attention_mask', kwargs.get('attn_mask', None))
-            
-            # If we couldn't extract the necessary tensors, fall back to original
-            if query is None:
-                logger.warning(f"Falling back to original attention for {name} - couldn't extract inputs")
-                try:
-                    # For modules that expect specific arg patterns, be more careful
-                    if isinstance(module, nn.Linear):
-                        if len(args) > 0:
-                            return original_forward(args[0])
-                        elif 'input' in kwargs:
-                            return original_forward(kwargs['input'])
-                        elif len(kwargs) == 1:
-                            return original_forward(list(kwargs.values())[0])
-                    
-                    # Default fallback
-                    return original_forward(*args, **kwargs)
-                except Exception as e:
-                    logger.error(f"Error calling original forward: {e}")
-                    # Last resort - try with first arg only
-                    if len(args) > 0:
-                        return original_forward(args[0])
-                    return original_forward(**kwargs)
-            
             try:
+                # Try to identify query, key, value from args/kwargs
+                query = None
+                key = None
+                value = None
+                attention_mask = None
+                
+                # Extract from args if available (common pattern)
+                if len(args) >= 1:
+                    query = args[0]
+                    if len(args) >= 3:
+                        key, value = args[1:3]
+                    if len(args) >= 4:
+                        attention_mask = args[3]
+                
+                # Extract from common kwarg names
+                if query is None:
+                    query = kwargs.get('query', kwargs.get('hidden_states', kwargs.get('input', None)))
+                    
+                if key is None:
+                    key = kwargs.get('key', kwargs.get('key_states', query))
+                    
+                if value is None:
+                    value = kwargs.get('value', kwargs.get('value_states', key))
+                    
+                if attention_mask is None:
+                    attention_mask = kwargs.get('attention_mask', kwargs.get('attn_mask', None))
+                
+                # If we couldn't extract the necessary tensors or query is not a tensor,
+                # fall back to original
+                if query is None or not isinstance(query, torch.Tensor):
+                    logger.warning(f"Falling back to original attention for {name} - couldn't extract inputs")
+                    return original_forward(*args, **kwargs)
+                
                 # Forward to HSA module
                 output, attention_weights = hsa_module(query, key, value, attention_mask)
                 
                 # Try to match original return signature
+                # Check if original returns tuple
                 try:
-                    sample_result = None
-                    # Safely sample return type without modifying args
-                    if len(sig.parameters) <= 2 and len(args) > 0:
-                        # For simple functions like Linear
-                        sample_result = original_forward(args[0])
-                    else:
-                        # Try to infer return type without actually calling
-                        pass
+                    dummy_args = []
+                    for i, param in enumerate(sig.parameters.values()):
+                        if i < len(args):
+                            dummy_args.append(args[i])
+                        elif param.name in kwargs:
+                            continue
+                        elif param.default != inspect.Parameter.empty:
+                            continue
+                        else:
+                            # Try to provide a dummy value of the expected type
+                            if 'tensor' in param.name.lower() or 'state' in param.name.lower():
+                                dummy_args.append(query)  # Reuse query as dummy
+                            else:
+                                dummy_args.append(None)
                     
-                    if sample_result is not None and isinstance(sample_result, tuple):
+                    # This is a safe way to check return type without executing
+                    returns_tuple = 'tuple' in str(sig.return_annotation)
+                    if returns_tuple:
                         return (output, attention_weights)
                     else:
                         return output
                 except Exception:
-                    # If sampling fails, default to returning just the output
+                    # If checking fails, default to returning just the output
                     return output
+                
             except Exception as e:
                 logger.warning(f"Error in HSA processing: {e}. Falling back to original.")
                 # Fall back to original in case of error
@@ -463,9 +672,18 @@ class ModelPatcher:
                 
                 if parent_path:
                     parent = self.model.get_submodule(parent_path)
-                    setattr(parent, target, original["module"])
+                    # Restore original forward method
+                    module = getattr(parent, target)
+                    module.forward = original["forward"]
+                    
+                    # For GPT-2, also restore _attn if it was patched
+                    if self.model_type == "gpt2" and hasattr(module, "_attn"):
+                        if hasattr(original["module"], "_attn"):
+                            module._attn = original["module"]._attn
                 else:
-                    setattr(self.model, target, original["module"])
+                    # Top-level module
+                    module = getattr(self.model, target)
+                    module.forward = original["forward"]
                 
                 logger.info(f"Restored original module: {name}")
             except Exception as e:
@@ -514,22 +732,30 @@ def create_adapter_for_model(
         Tuple of (model_patcher, registry)
     """
     # Determine embedding dimension
+    embedding_dim = 768  # Default fallback
+    
     if hasattr(model.config, "hidden_size"):
         embedding_dim = model.config.hidden_size
     elif hasattr(model.config, "d_model"):
         embedding_dim = model.config.d_model
-    else:
-        embedding_dim = 768  # Default fallback
-        logger.warning(f"Could not determine embedding dimension, using default: {embedding_dim}")
+    elif hasattr(model.config, "n_embd"):
+        embedding_dim = model.config.n_embd
+    
+    logger.info(f"Using embedding dimension: {embedding_dim}")
     
     # Create hierarchy
     if hierarchy_levels is None:
         hierarchy_levels = ["token", "word", "phrase", "sentence", "document"]
     
     # Adjust init splats per level based on embedding dimension
-    # More complex models with larger dimensions might need more splats
     base_splats = [int(embedding_dim * 0.2), int(embedding_dim * 0.1), 
                    int(embedding_dim * 0.05), int(embedding_dim * 0.02), 5]
+    
+    # Make sure we have enough values
+    while len(base_splats) < len(hierarchy_levels):
+        base_splats.append(5)  # Default for additional levels
+    
+    # Trim if we have too many
     init_splats_per_level = base_splats[:len(hierarchy_levels)]
     
     # Create hierarchy
@@ -562,7 +788,7 @@ def create_adapter_for_model(
         "max_context_length": max_context_length
     }
     
-    # Create and return patcher
+    # Create patcher
     patcher = ModelPatcher(
         model=model,
         registry=registry,
@@ -575,21 +801,24 @@ def create_adapter_for_model(
     
     # Create adaptation controller if enabled
     if adaptation_enabled:
-        from hsa.adaptation_metrics_base import AdaptationMetricsComputer, SplatCandidateEvaluator
-        from hsa.attention_info_metrics import InfoTheoreticMetricsComputer, InfoTheoreticCandidateEvaluator
-        from hsa.adaptation_controller import AdaptationController
-        
-        metrics_computer = InfoTheoreticMetricsComputer()
-        candidate_evaluator = InfoTheoreticCandidateEvaluator(metrics_computer)
-        
-        adaptation_controller = AdaptationController(
-            registry=registry,
-            metrics_computer=metrics_computer,
-            candidate_evaluator=candidate_evaluator
-        )
-        
-        # Store adaptation controller in patcher for later access
-        patcher.adaptation_controller = adaptation_controller
+        try:
+            from hsa.adaptation_metrics_base import AdaptationMetricsComputer, SplatCandidateEvaluator
+            from hsa.attention_info_metrics import InfoTheoreticMetricsComputer, InfoTheoreticCandidateEvaluator
+            from hsa.adaptation_controller import AdaptationController
+            
+            metrics_computer = InfoTheoreticMetricsComputer()
+            candidate_evaluator = InfoTheoreticCandidateEvaluator(metrics_computer)
+            
+            adaptation_controller = AdaptationController(
+                registry=registry,
+                metrics_computer=metrics_computer,
+                candidate_evaluator=candidate_evaluator
+            )
+            
+            # Store adaptation controller in patcher for later access
+            patcher.adaptation_controller = adaptation_controller
+        except ImportError:
+            logger.warning("Could not import adaptation modules, adaptation disabled")
     
     return patcher, registry
 
@@ -618,10 +847,14 @@ class ContextExtender:
         self.registry = registry
         
         # Get model's default context length
+        self.original_context_length = 1024  # Default fallback
+        
         if hasattr(model.config, "max_position_embeddings"):
             self.original_context_length = model.config.max_position_embeddings
-        else:
-            self.original_context_length = 1024  # Default fallback
+        elif hasattr(model.config, "n_positions"):
+            self.original_context_length = model.config.n_positions
+        elif hasattr(model.config, "n_ctx"):
+            self.original_context_length = model.config.n_ctx
         
         # Store the original position embeddings if any
         self.original_embeddings = None
@@ -642,6 +875,12 @@ class ContextExtender:
             self.original_embeddings = {
                 "name": "transformer.wpe",
                 "embeddings": self.model.transformer.wpe.weight.clone()
+            }
+        elif hasattr(self.model, "gpt_neox") and hasattr(self.model.gpt_neox, "embed_positions"):
+            # GPT-Neo style
+            self.original_embeddings = {
+                "name": "gpt_neox.embed_positions",
+                "embeddings": self.model.gpt_neox.embed_positions.weight.clone()
             }
         elif hasattr(self.model, "model") and hasattr(self.model.model, "embed_positions"):
             # OPT style
@@ -681,6 +920,9 @@ class ContextExtender:
             if "transformer.wpe" == self.original_embeddings["name"]:
                 # GPT-2 style
                 return self._extend_gpt2(target_length)
+            elif "gpt_neox.embed_positions" == self.original_embeddings["name"]:
+                # GPT-Neo style
+                return self._extend_gpt_neo(target_length)
             elif "model.embed_positions" == self.original_embeddings["name"]:
                 # OPT style
                 return self._extend_opt(target_length)
@@ -720,6 +962,45 @@ class ContextExtender:
         
         # Update model config
         self.model.config.max_position_embeddings = target_length
+        self.model.config.n_positions = target_length
+        self.model.config.n_ctx = target_length
+        
+        # Update stats
+        self.extension_stats["current_length"] = target_length
+        
+        logger.info(f"Extended context to {target_length} (from {original_len})")
+        return True
+    
+    def _extend_gpt_neo(self, target_length: int) -> bool:
+        """Extend context for GPT-Neo style models."""
+        original = self.original_embeddings["embeddings"]
+        original_len = original.shape[0]
+        embed_dim = original.shape[1]
+        
+        # Create extended embeddings
+        extended = torch.zeros((target_length, embed_dim), device=original.device, dtype=original.dtype)
+        
+        # Copy original embeddings
+        extended[:original_len] = original
+        
+        # Extrapolate remaining positions
+        if target_length > original_len:
+            # Use rotary pattern for extrapolation (mimics sinusoidal pattern)
+            for i in range(original_len, target_length):
+                # Cycle through original embeddings with a slight scaling
+                base_idx = i % original_len
+                scale_factor = 1.0 + 0.001 * (i // original_len)
+                extended[i] = original[base_idx] * scale_factor
+        
+        # Update embeddings
+        self.model.gpt_neox.embed_positions.weight = nn.Parameter(extended)
+        
+        # Update model config
+        self.model.config.max_position_embeddings = target_length
+        if hasattr(self.model.config, "n_positions"):
+            self.model.config.n_positions = target_length
+        if hasattr(self.model.config, "n_ctx"):
+            self.model.config.n_ctx = target_length
         
         # Update stats
         self.extension_stats["current_length"] = target_length
@@ -803,6 +1084,8 @@ class ContextExtender:
             # Restore embeddings based on model type
             if "transformer.wpe" == self.original_embeddings["name"]:
                 self.model.transformer.wpe.weight = nn.Parameter(self.original_embeddings["embeddings"])
+            elif "gpt_neox.embed_positions" == self.original_embeddings["name"]:
+                self.model.gpt_neox.embed_positions.weight = nn.Parameter(self.original_embeddings["embeddings"])
             elif "model.embed_positions" == self.original_embeddings["name"]:
                 self.model.model.embed_positions.weight = nn.Parameter(self.original_embeddings["embeddings"])
             elif "model.decoder.embed_positions" == self.original_embeddings["name"]:
@@ -810,6 +1093,10 @@ class ContextExtender:
             
             # Restore model config
             self.model.config.max_position_embeddings = self.original_context_length
+            if hasattr(self.model.config, "n_positions"):
+                self.model.config.n_positions = self.original_context_length
+            if hasattr(self.model.config, "n_ctx"):
+                self.model.config.n_ctx = self.original_context_length
             
             # Update stats
             self.extension_stats["current_length"] = self.original_context_length
