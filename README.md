@@ -1,4 +1,4 @@
-# Hierarchical Gaussian K-Splat Attention (HSA)
+# Gaussian Splat Attention (GSA)
 
 A novel attention mechanism for transformers that enables efficient processing of extremely long contexts while capturing hierarchical structure in data.
 
