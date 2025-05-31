@@ -1,0 +1,29 @@
+{
+  "verdict": "failed",
+  "success_rate": 0.2857142857142857,
+  "baseline_performance": {
+    "perplexity": 10.149552020663283,
+    "avg_loss": 2.317429568618536,
+    "avg_generation_time": 0.0666086196899414,
+    "sequences_tested": 5
+  },
+  "gsa_performance": {
+    "perplexity": Infinity,
+    "avg_loss": Infinity,
+    "avg_generation_time": Infinity,
+    "sequences_tested": 0
+  },
+  "context_test": {
+    "standard_success": false,
+    "gsa_success": false
+  },
+  "criteria": {
+    "models_loaded": true,
+    "gsa_created": true,
+    "performance_measured": false,
+    "performance_acceptable": false,
+    "speed_acceptable": false,
+    "gsa_works": false,
+    "baseline_works": false
+  }
+}

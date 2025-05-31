@@ -1,0 +1,59 @@
+{
+  "verdict": "implementation_bug",
+  "measurement_works": false,
+  "mode_results": {
+    "no_op": {
+      "mode": "no_op",
+      "max_difference": 1.6622636318206787,
+      "avg_difference": 1.2917316953341167,
+      "relative_change_pct": 57.01416699117059,
+      "original_losses": [
+        0.7994503378868103,
+        3.628211259841919,
+        2.369236946105957
+      ],
+      "diagnostic_losses": [
+        2.031196117401123,
+        5.290474891662598,
+        3.3504226207733154
+      ]
+    },
+    "controlled": {
+      "mode": "controlled",
+      "max_difference": 1.662264108657837,
+      "avg_difference": 1.291732092698415,
+      "relative_change_pct": 57.01418452994783,
+      "original_losses": [
+        0.7994503378868103,
+        3.628211259841919,
+        2.369236946105957
+      ],
+      "diagnostic_losses": [
+        2.0311965942382812,
+        5.290475368499756,
+        3.3504228591918945
+      ]
+    },
+    "micro": {
+      "mode": "micro",
+      "max_difference": 1.6622655391693115,
+      "avg_difference": 1.2917127013206482,
+      "relative_change_pct": 57.01332863761803,
+      "original_losses": [
+        0.7994503378868103,
+        3.628211259841919,
+        2.369236946105957
+      ],
+      "diagnostic_losses": [
+        2.031172275543213,
+        5.2904767990112305,
+        3.3503875732421875
+      ]
+    }
+  },
+  "summary": {
+    "no_op_impact_pct": 57.01416699117059,
+    "controlled_impact_pct": 57.01418452994783,
+    "micro_impact_pct": 57.01332863761803
+  }
+}

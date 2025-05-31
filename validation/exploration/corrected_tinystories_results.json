@@ -1,0 +1,16 @@
+{
+  "verdict": "failed",
+  "baseline_performance": {
+    "perplexity": 10.149552020663283,
+    "avg_loss": 2.317429568618536,
+    "avg_generation_time": 0.06667289733886719,
+    "sequences_tested": 5
+  },
+  "corrected_performance": {
+    "perplexity": Infinity,
+    "avg_loss": Infinity,
+    "avg_generation_time": Infinity,
+    "sequences_tested": 0
+  },
+  "performance_change_pct": null
+}

@@ -1,0 +1,31 @@
+{
+  "verdict": "needs_more_work",
+  "phase": "ultra_conservative_gsa_phase2_1",
+  "gsa_stayed_enabled": true,
+  "original_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957,
+    2.3487415313720703,
+    3.11824893951416
+  ],
+  "gsa_losses": [
+    2.031196117401123,
+    5.290475845336914,
+    3.3504228591918945,
+    3.767519950866699,
+    3.492353916168213
+  ],
+  "max_difference": 1.6622645854949951,
+  "avg_difference": 1.1336159348487853,
+  "relative_change_pct": 46.21763673366798,
+  "improvement_vs_phase2": 0.0023632663320185543,
+  "improvement_vs_phase1_5": 11.67236326633202,
+  "generation_works": true,
+  "ultra_conservative_parameters": {
+    "mix_weight": 4.539786823443137e-05,
+    "influence_scale": 0.01798621006309986,
+    "extra_damping": 0.1,
+    "effective_influence": 8.165355944814111e-08
+  }
+}

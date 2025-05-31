@@ -1,0 +1,24 @@
+{
+  "verdict": "perfect",
+  "bug_fixed": true,
+  "scaffolding_perfect": true,
+  "original_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957
+  ],
+  "scaffolding_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957
+  ],
+  "gsa_losses": [
+    0.7994190454483032,
+    3.6267638206481934,
+    2.368908166885376
+  ],
+  "max_scaffolding_diff": 0.0,
+  "max_gsa_diff": 0.001447439193725586,
+  "relative_change_pct": -0.02659317100522669,
+  "gsa_strength": 0.0024726230185478926
+}

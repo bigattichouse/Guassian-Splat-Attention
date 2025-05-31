@@ -1,0 +1,83 @@
+{
+  "timestamp": "2025-05-28T13:42:14.267587",
+  "config": {
+    "dim": 256,
+    "n_heads": 8,
+    "n_splats_per_head": 12,
+    "movement_scale": 0.1,
+    "pruning_threshold": 0.02,
+    "temperature_init": 1.0,
+    "scale_init": 0.4,
+    "learning_rate": 0.002,
+    "splat_lr_multiplier": 0.3,
+    "gradient_clip": 1.0,
+    "use_vectorized": true,
+    "checkpoint_gradients": false
+  },
+  "test_results": {
+    "correctness": {
+      "passed": true,
+      "details": {
+        "attention_normalized": true,
+        "attention_non_negative": "tensor(True)",
+        "gradients_flow": true,
+        "output_shape_correct": true
+      }
+    },
+    "pattern_learning": {
+      "passed": "True",
+      "improvement": 22.193531610185254
+    },
+    "movement": {
+      "passed": true,
+      "movement_stats": {
+        "initial_amplitude_var": 0.003893161192536354,
+        "final_amplitude_var": 0.0501110665500164,
+        "specialization_ratio": 12.871562227139526,
+        "average_movement": 0.3996548652648926,
+        "max_movement": 0.9660482406616211
+      }
+    },
+    "efficiency": {
+      "passed": "True",
+      "efficiency_metrics": {
+        "small": {
+          "gsa_time": 2.7649184499750845,
+          "std_time": 0.4112003500267747,
+          "overhead": 6.724017744136286
+        },
+        "medium": {
+          "gsa_time": 13.564498300002015,
+          "std_time": 1.4087684499827446,
+          "overhead": 9.628621580905053
+        },
+        "large": {
+          "gsa_time": 110.24837594995915,
+          "std_time": 8.842109400029585,
+          "overhead": 12.468560494127145
+        }
+      },
+      "average_overhead": 9.607066606389495
+    },
+    "integration": {
+      "passed": "True",
+      "training_stable": true,
+      "loss_decreased": "True"
+    },
+    "stability": {
+      "passed": true,
+      "stability_checks": {
+        "small_inputs": true,
+        "large_inputs": true,
+        "mixed_scales": true,
+        "long_sequences": true,
+        "gradient_flow": true
+      }
+    }
+  },
+  "summary": {
+    "tests_passed": 6,
+    "total_tests": 6,
+    "production_ready": true
+  }
+}

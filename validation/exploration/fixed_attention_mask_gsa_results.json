@@ -1,0 +1,21 @@
+{
+  "verdict": "needs_tuning",
+  "gsa_stayed_enabled": true,
+  "attention_mask_fixed": true,
+  "original_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957,
+    2.3487415313720703
+  ],
+  "gsa_losses": [
+    2.0311954021453857,
+    5.290475368499756,
+    3.350419044494629,
+    3.7675209045410156
+  ],
+  "max_difference": 1.662264108657837,
+  "avg_difference": 1.3234926611185074,
+  "relative_change_pct": 57.885184644710044,
+  "generation_works": true
+}

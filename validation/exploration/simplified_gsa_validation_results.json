@@ -1,0 +1,29 @@
+{
+  "verdict": "failed",
+  "success_rate": 0.42857142857142855,
+  "baseline_performance": {
+    "perplexity": 10.149552020663283,
+    "avg_loss": 2.317429568618536,
+    "avg_generation_time": 0.06880555152893067,
+    "sequences_tested": 5
+  },
+  "gsa_performance": {
+    "perplexity": 8653.898328717272,
+    "avg_loss": 9.065765172243118,
+    "avg_generation_time": 0.44487762451171875,
+    "sequences_tested": 5
+  },
+  "context_test": {
+    "standard_success": false,
+    "gsa_success": false
+  },
+  "criteria": {
+    "models_loaded": true,
+    "gsa_created": true,
+    "performance_measured": true,
+    "performance_acceptable": false,
+    "speed_acceptable": false,
+    "gsa_works": false,
+    "baseline_works": false
+  }
+}

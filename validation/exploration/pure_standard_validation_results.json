@@ -1,0 +1,36 @@
+{
+  "verdict": "pure_standard_functional",
+  "success_rate": 0.75,
+  "baseline_performance": {
+    "perplexity": 10.149552020663283,
+    "avg_loss": 2.317429568618536,
+    "avg_generation_time": 0.07667808532714844,
+    "sequences_tested": 5
+  },
+  "gsa_performance": {
+    "perplexity": 6302.609522752867,
+    "avg_loss": 8.748719036579132,
+    "avg_generation_time": 0.04857206344604492,
+    "sequences_tested": 5
+  },
+  "context_test": {
+    "standard_success": false,
+    "gsa_success": false
+  },
+  "criteria": {
+    "models_loaded": true,
+    "gsa_created": true,
+    "performance_measured": true,
+    "performance_identical": false,
+    "performance_acceptable": false,
+    "speed_acceptable": true,
+    "both_work": true,
+    "no_crashes": true
+  },
+  "performance_change_pct": 61997.41582605323,
+  "parameter_overhead": {
+    "total_increase": 9344,
+    "unused_params": 128,
+    "percentage": 0.013638079011183224
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "verdict": "deeper_investigation_needed",
+  "phase": "micro_gsa_final",
+  "gsa_stayed_enabled": true,
+  "original_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957,
+    2.3487415313720703,
+    3.11824893951416
+  ],
+  "gsa_losses": [
+    2.031195878982544,
+    5.290474891662598,
+    3.3504221439361572,
+    3.7675204277038574,
+    3.492353916168213
+  ],
+  "max_difference": 1.6622636318206787,
+  "avg_difference": 1.1336156487464906,
+  "relative_change_pct": 46.21762506924838,
+  "breakthrough_vs_phase2_1": 0.002374930751621207,
+  "generation_works": true,
+  "micro_parameters": {
+    "mix_weight": 0.006692850962281227,
+    "modification_bound": 0.001,
+    "max_theoretical_impact": 6.692850962281227e-06,
+    "modification_bound_vs_previous": "0.001 vs 0.099668 (100x smaller)"
+  }
+}

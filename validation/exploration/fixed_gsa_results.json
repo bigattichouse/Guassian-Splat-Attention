@@ -1,0 +1,19 @@
+{
+  "verdict": "fallback_success",
+  "gsa_computation_worked": false,
+  "scaffolding_perfect": true,
+  "original_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957
+  ],
+  "gsa_enabled_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957
+  ],
+  "max_difference": 0.0,
+  "avg_difference": 0.0,
+  "relative_change_pct": 0.0,
+  "generation_works": true
+}

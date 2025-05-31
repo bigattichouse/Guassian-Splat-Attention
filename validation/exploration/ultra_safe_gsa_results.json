@@ -1,0 +1,37 @@
+{
+  "verdict": "success",
+  "step1_passed": true,
+  "step1_max_diff": 0.0,
+  "step2_verdict": "excellent",
+  "step2_max_diff": 0.0,
+  "original_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957,
+    2.3487415313720703,
+    3.11824893951416
+  ],
+  "gsa_disabled_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957,
+    2.3487415313720703,
+    3.11824893951416
+  ],
+  "gsa_enabled_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957,
+    2.3487415313720703,
+    3.11824893951416
+  ],
+  "parameter_increase": 6276,
+  "generation_works": true,
+  "success_criteria": {
+    "scaffolding_works": true,
+    "gsa_enabled": true,
+    "reasonable_performance": true,
+    "generation_works": true,
+    "no_crashes": true
+  }
+}

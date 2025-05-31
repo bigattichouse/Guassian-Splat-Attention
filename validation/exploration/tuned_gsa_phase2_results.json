@@ -1,0 +1,30 @@
+{
+  "verdict": "needs_more_tuning",
+  "phase": "tuned_gsa_phase2",
+  "gsa_stayed_enabled": true,
+  "original_losses": [
+    0.7994503378868103,
+    3.628211259841919,
+    2.369236946105957,
+    2.3487415313720703,
+    3.11824893951416
+  ],
+  "gsa_losses": [
+    2.031201124191284,
+    5.290423393249512,
+    3.350407600402832,
+    3.7674970626831055,
+    3.4923863410949707
+  ],
+  "max_difference": 1.6622121334075928,
+  "avg_difference": 1.1336053013801575,
+  "relative_change_pct": 46.217203206072654,
+  "improvement_vs_phase1": 11.672796793927347,
+  "generation_works": true,
+  "generation_quality": "repetitive",
+  "tuning_parameters": {
+    "initial_mix_weight": 0.0009110511746257544,
+    "influence_scale": 0.5249791741371155,
+    "num_splats": 3
+  }
+}
