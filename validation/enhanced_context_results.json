@@ -1,0 +1,113 @@
+{
+  "verdict": "basic_success",
+  "model_used": "EleutherAI/gpt-neo-125M",
+  "gsa_compatible": true,
+  "gsa_installed": true,
+  "test_type": "GSA",
+  "native_context": 2048,
+  "extension_target": 3072,
+  "has_extension": true,
+  "native_orig_success": 2048,
+  "native_gsa_success": 2048,
+  "extension_orig_success": 0,
+  "extension_gsa_success": 0,
+  "retrieval_improvement": false,
+  "context_extension_benefit": false,
+  "scaffolding_diff": 0.0,
+  "test_results": {
+    "512": {
+      "needle_code": "5985",
+      "original_success": true,
+      "original_answer": "5985.\n\nThe",
+      "gsa_success": true,
+      "gsa_answer": "5985.\n\nThe",
+      "memory_after": "GPU: 1.11GB (peak: 1.20GB)",
+      "is_native_test": true
+    },
+    "1024": {
+      "needle_code": "2412",
+      "original_success": true,
+      "original_answer": "2412. The code 24",
+      "gsa_success": true,
+      "gsa_answer": "2412. The code 24",
+      "memory_after": "GPU: 1.11GB (peak: 1.33GB)",
+      "is_native_test": true
+    },
+    "1536": {
+      "needle_code": "8935",
+      "original_success": true,
+      "original_answer": "8935. The code 89",
+      "gsa_success": true,
+      "gsa_answer": "8935. The code 89",
+      "memory_after": "GPU: 1.11GB (peak: 1.59GB)",
+      "is_native_test": true
+    },
+    "2048": {
+      "needle_code": "9617",
+      "original_success": true,
+      "original_answer": "The code 9617",
+      "gsa_success": true,
+      "gsa_answer": "The code 9617",
+      "memory_after": "GPU: 1.11GB (peak: 1.95GB)",
+      "is_native_test": true
+    },
+    "2560": {
+      "needle_code": "4539",
+      "original_success": false,
+      "original_answer": "The secret code is",
+      "gsa_success": false,
+      "gsa_answer": "the",
+      "memory_after": "GPU: 1.11GB (peak: 2.42GB)",
+      "is_native_test": false
+    }
+  },
+  "native_results": {
+    "512": {
+      "needle_code": "5985",
+      "original_success": true,
+      "original_answer": "5985.\n\nThe",
+      "gsa_success": true,
+      "gsa_answer": "5985.\n\nThe",
+      "memory_after": "GPU: 1.11GB (peak: 1.20GB)",
+      "is_native_test": true
+    },
+    "1024": {
+      "needle_code": "2412",
+      "original_success": true,
+      "original_answer": "2412. The code 24",
+      "gsa_success": true,
+      "gsa_answer": "2412. The code 24",
+      "memory_after": "GPU: 1.11GB (peak: 1.33GB)",
+      "is_native_test": true
+    },
+    "1536": {
+      "needle_code": "8935",
+      "original_success": true,
+      "original_answer": "8935. The code 89",
+      "gsa_success": true,
+      "gsa_answer": "8935. The code 89",
+      "memory_after": "GPU: 1.11GB (peak: 1.59GB)",
+      "is_native_test": true
+    },
+    "2048": {
+      "needle_code": "9617",
+      "original_success": true,
+      "original_answer": "The code 9617",
+      "gsa_success": true,
+      "gsa_answer": "The code 9617",
+      "memory_after": "GPU: 1.11GB (peak: 1.95GB)",
+      "is_native_test": true
+    }
+  },
+  "extension_results": {
+    "2560": {
+      "needle_code": "4539",
+      "original_success": false,
+      "original_answer": "The secret code is",
+      "gsa_success": false,
+      "gsa_answer": "the",
+      "memory_after": "GPU: 1.11GB (peak: 2.42GB)",
+      "is_native_test": false
+    }
+  }
+}

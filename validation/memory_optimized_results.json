@@ -1,0 +1,41 @@
+{
+  "verdict": "memory_fixed",
+  "max_orig_success": 0,
+  "max_gsa_success": 0,
+  "retrieval_improvement": false,
+  "scaffolding_diff": 0.0,
+  "test_results": {
+    "512": {
+      "needle_code": "8011",
+      "original_success": false,
+      "original_answer": "Aire Kowerons.",
+      "gsa_success": false,
+      "gsa_answer": "Aire Kowerons.",
+      "memory_after": "GPU: 0.57GB (peak: 0.66GB)"
+    },
+    "1024": {
+      "needle_code": "1045",
+      "original_success": false,
+      "original_answer": "osh the colors. Noed",
+      "gsa_success": false,
+      "gsa_answer": "osh the colors. Noed",
+      "memory_after": "GPU: 0.57GB (peak: 0.86GB)"
+    },
+    "1536": {
+      "needle_code": "2724",
+      "original_success": false,
+      "original_answer": "the day was fun was fun",
+      "gsa_success": false,
+      "gsa_answer": "the sun was fun was fun",
+      "memory_after": "GPU: 0.57GB (peak: 1.20GB)"
+    },
+    "2048": {
+      "needle_code": "3221",
+      "original_success": false,
+      "original_answer": "the right.\nSummary.",
+      "gsa_success": false,
+      "gsa_answer": ". The street.\nSummary",
+      "memory_after": "GPU: 0.57GB (peak: 1.67GB)"
+    }
+  }
+}
