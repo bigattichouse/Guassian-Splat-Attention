@@ -1,0 +1,62 @@
+{
+  "verdict": "complete_onk_needs_work",
+  "model_used": "EleutherAI/gpt-neo-125M",
+  "target_context": 8192,
+  "max_success": 0,
+  "algorithm": "COMPLETE O(n\u00d7k) GSA",
+  "layers_replaced": 12,
+  "all_fixes_applied": [
+    "Fixed tensor broadcasting in amplitudes expansion",
+    "Fixed output format to match HuggingFace expectations [B,H,n,D]",
+    "Enhanced error handling and validation",
+    "All layers use COMPLETE O(n\u00d7k) GSA vs previous single layer"
+  ],
+  "load_time": 1.6808207035064697,
+  "test_results": {
+    "1024": {
+      "needle_code": "1606",
+      "complete_onk_success": false,
+      "complete_onk_answer": "omniaomniaomniaomniaomniaomnia",
+      "test_time": 1.6004621982574463,
+      "memory_after": "GPU: 1.24GB (peak: 1.56GB)"
+    },
+    "2048": {
+      "needle_code": "8470",
+      "complete_onk_success": false,
+      "complete_onk_answer": "MODULE MODULE MODULE MODULE MODULE MODULE",
+      "test_time": 3.382845878601074,
+      "memory_after": "GPU: 1.24GB (peak: 1.61GB)"
+    },
+    "3072": {
+      "needle_code": "3682",
+      "complete_onk_success": false,
+      "complete_onk_answer": "....................................",
+      "test_time": 6.350215911865234,
+      "memory_after": "GPU: 1.24GB (peak: 2.04GB)"
+    },
+    "4096": {
+      "needle_code": "5587",
+      "complete_onk_success": false,
+      "complete_onk_answer": "TTL TTL TTL TTL TTL TTL",
+      "test_time": 10.5088210105896,
+      "memory_after": "GPU: 1.24GB (peak: 2.63GB)"
+    },
+    "6144": {
+      "needle_code": "5823",
+      "complete_onk_success": false,
+      "complete_onk_answer": "TTL TTL TTL TTL TTL TTL",
+      "test_time": 20.72094750404358,
+      "memory_after": "GPU: 1.24GB (peak: 4.32GB)"
+    },
+    "8192": {
+      "needle_code": "8925",
+      "complete_onk_success": false,
+      "complete_onk_answer": "Error: CUDA out of memory. Tried to allocate 2.53 GiB. GP...",
+      "test_time": 0.1318669319152832,
+      "memory_after": "GPU: 1.24GB (peak: 4.32GB)"
+    }
+  },
+  "breakthrough_achieved": false,
+  "broadcasting_fix_verified": true,
+  "output_format_fix_verified": true
+}

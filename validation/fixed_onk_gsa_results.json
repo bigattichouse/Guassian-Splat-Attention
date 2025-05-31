@@ -1,0 +1,59 @@
+{
+  "verdict": "fixed_onk_needs_work",
+  "model_used": "EleutherAI/gpt-neo-125M",
+  "target_context": 8192,
+  "max_success": 0,
+  "algorithm": "FIXED O(n\u00d7k) GSA",
+  "layers_replaced": 12,
+  "critical_fixes": [
+    "Fixed tensor broadcasting in amplitudes expansion",
+    "All layers use FIXED O(n\u00d7k) GSA vs previous single layer"
+  ],
+  "load_time": 1.341925859451294,
+  "test_results": {
+    "1024": {
+      "needle_code": "2414",
+      "fixed_onk_success": false,
+      "fixed_onk_answer": "Error: permute(sparse_coo): number of dimensions in the t...",
+      "test_time": 0.1875162124633789,
+      "memory_after": "GPU: 1.24GB (peak: 1.56GB)"
+    },
+    "2048": {
+      "needle_code": "9667",
+      "fixed_onk_success": false,
+      "fixed_onk_answer": "Error: permute(sparse_coo): number of dimensions in the t...",
+      "test_time": 0.046655893325805664,
+      "memory_after": "GPU: 1.24GB (peak: 1.61GB)"
+    },
+    "3072": {
+      "needle_code": "3546",
+      "fixed_onk_success": false,
+      "fixed_onk_answer": "Error: permute(sparse_coo): number of dimensions in the t...",
+      "test_time": 0.09060168266296387,
+      "memory_after": "GPU: 1.24GB (peak: 2.03GB)"
+    },
+    "4096": {
+      "needle_code": "2969",
+      "fixed_onk_success": false,
+      "fixed_onk_answer": "Error: permute(sparse_coo): number of dimensions in the t...",
+      "test_time": 0.12979555130004883,
+      "memory_after": "GPU: 1.24GB (peak: 2.63GB)"
+    },
+    "6144": {
+      "needle_code": "3888",
+      "fixed_onk_success": false,
+      "fixed_onk_answer": "Error: permute(sparse_coo): number of dimensions in the t...",
+      "test_time": 0.24065494537353516,
+      "memory_after": "GPU: 1.24GB (peak: 4.32GB)"
+    },
+    "8192": {
+      "needle_code": "9732",
+      "fixed_onk_success": false,
+      "fixed_onk_answer": "Error: CUDA out of memory. Tried to allocate 2.53 GiB. GP...",
+      "test_time": 0.13095569610595703,
+      "memory_after": "GPU: 1.24GB (peak: 4.32GB)"
+    }
+  },
+  "breakthrough_achieved": false,
+  "broadcasting_fix_verified": true
+}

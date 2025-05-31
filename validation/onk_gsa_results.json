@@ -1,0 +1,53 @@
+{
+  "verdict": "onk_basic",
+  "model_used": "EleutherAI/gpt-neo-125M",
+  "target_context": 8192,
+  "max_success": 2048,
+  "algorithm": "O(n\u00d7k) GSA",
+  "load_time": 1.535501480102539,
+  "test_results": {
+    "1024": {
+      "needle_code": "4791",
+      "onk_success": true,
+      "onk_answer": "4791.",
+      "test_time": 1.4091274738311768,
+      "memory_after": "GPU: 0.60GB (peak: 0.92GB)"
+    },
+    "2048": {
+      "needle_code": "2869",
+      "onk_success": true,
+      "onk_answer": "2869. The code 28",
+      "test_time": 2.8650364875793457,
+      "memory_after": "GPU: 0.60GB (peak: 0.97GB)"
+    },
+    "3072": {
+      "needle_code": "2345",
+      "onk_success": false,
+      "onk_answer": "Error: The size of tensor a (2048) must match the size of...",
+      "test_time": 0.09756755828857422,
+      "memory_after": "GPU: 0.60GB (peak: 1.39GB)"
+    },
+    "4096": {
+      "needle_code": "2989",
+      "onk_success": false,
+      "onk_answer": "Error: The size of tensor a (2048) must match the size of...",
+      "test_time": 0.1560213565826416,
+      "memory_after": "GPU: 0.60GB (peak: 1.99GB)"
+    },
+    "6144": {
+      "needle_code": "4559",
+      "onk_success": false,
+      "onk_answer": "Error: The size of tensor a (2048) must match the size of...",
+      "test_time": 0.3148162364959717,
+      "memory_after": "GPU: 0.60GB (peak: 3.67GB)"
+    },
+    "8192": {
+      "needle_code": "3849",
+      "onk_success": false,
+      "onk_answer": "Error: CUDA out of memory. Tried to allocate 2.53 GiB. GP...",
+      "test_time": 0.14095544815063477,
+      "memory_after": "GPU: 0.60GB (peak: 3.67GB)"
+    }
+  },
+  "breakthrough_achieved": false
+}
