@@ -73,8 +73,12 @@ class ExtendedDataset(Dataset):
         # Collect texts from multiple sources
         all_texts = []
         
-        # 1. TinyStories-Instruct (proven to work)
-        all_texts.extend(self.load_tinystories_instruct(target_texts=total_sequences//3))
+        # 1. TinyStories-Instruct (proven to work) - try multiple approaches
+        instruct_texts = self.load_tinystories_instruct(target_texts=total_sequences//3)
+        if len(instruct_texts) == 0:
+            print(f"  🔄 TinyStories-Instruct failed, trying regular TinyStories instead...")
+            instruct_texts = self.load_tinystories(target_texts=total_sequences//3)
+        all_texts.extend(instruct_texts)
         
         # 2. WikiText-103 (long articles)
         all_texts.extend(self.load_wikitext(target_texts=total_sequences//3))
@@ -89,11 +93,20 @@ class ExtendedDataset(Dataset):
         all_texts.extend(self.load_bookcorpus(target_texts=total_sequences//6))
         
         # 6. Fill remaining with high-quality synthetic
-        remaining = total_sequences - len(all_texts)//10  # Estimate
+        current_count = len(all_texts)
+        remaining = max(0, total_sequences//2 - current_count)  # Ensure we have enough texts
         if remaining > 0:
+            print(f"  🤖 Need {remaining} more texts, creating high-quality synthetic...")
             all_texts.extend(self.create_quality_synthetic(remaining))
         
-        print(f"📊 Collected {len(all_texts)} source texts")
+        print(f"📊 Total source texts collected: {len(all_texts)}")
+        
+        # Ensure we have enough texts for meaningful training
+        if len(all_texts) < 500:
+            print(f"  ⚠️  Only {len(all_texts)} texts collected, adding more synthetic content...")
+            synthetic_needed = 1000 - len(all_texts)
+            all_texts.extend(self.create_quality_synthetic(synthetic_needed))
+            print(f"  ✅ Added {synthetic_needed} synthetic texts, total: {len(all_texts)}")
         
         # Create sequences with improved processing
         self.create_sequences_from_texts(all_texts, total_sequences)
@@ -107,24 +120,62 @@ class ExtendedDataset(Dataset):
         
         try:
             print(f"  📖 Loading TinyStories-Instruct (target: {target_texts})...")
-            dataset = load_dataset("roneneldan/TinyStories-Instruct", split="train")
+            dataset = load_dataset("roneneldan/TinyStories-Instruct", split="train", trust_remote_code=True)
             
             count = 0
+            processed = 0
             for item in dataset:
+                processed += 1
                 if count >= target_texts:
                     break
                     
-                if 'prompt' in item and 'completion' in item:
-                    # Format as instruction-response pairs
-                    text = f"### Instruction:\n{item['prompt'].strip()}\n\n### Response:\n{item['completion'].strip()}\n\n"
-                    if len(text) > 100:  # Only substantial content
-                        texts.append(text)
+                try:
+                    if 'prompt' in item and 'completion' in item:
+                        # Format as instruction-response pairs
+                        prompt = str(item['prompt']).strip()
+                        completion = str(item['completion']).strip()
+                        
+                        if len(prompt) > 10 and len(completion) > 10:
+                            text = f"### Instruction:\n{prompt}\n\n### Response:\n{completion}\n\n"
+                            texts.append(text)
+                            count += 1
+                    elif 'text' in item:
+                        text = str(item['text']).strip()
+                        if len(text) > 100:
+                            texts.append(text + "\n\n")
+                            count += 1
+                    elif isinstance(item, str) and len(item) > 100:
+                        texts.append(item + "\n\n")
                         count += 1
+                        
+                except Exception as e:
+                    if processed % 100 == 0:
+                        print(f"    ⚠️  Error processing item {processed}: {e}")
+                    continue
+                
+                # Progress logging
+                if processed % 1000 == 0:
+                    print(f"    📊 Processed {processed}, collected {count}")
             
             print(f"    ✅ Added {len(texts)} TinyStories-Instruct examples")
             
         except Exception as e:
             print(f"    ❌ Failed to load TinyStories-Instruct: {e}")
+            print(f"    🔄 Trying alternative approach...")
+            
+            # Fallback: try regular TinyStories-Instruct format
+            try:
+                dataset = load_dataset("roneneldan/TinyStories-Instruct", split="train")
+                for i, item in enumerate(dataset):
+                    if len(texts) >= target_texts:
+                        break
+                    if 'text' in item and len(item['text']) > 100:
+                        texts.append(item['text'] + "\n\n")
+                        
+                print(f"    ✅ Fallback loaded {len(texts)} examples")
+                        
+            except Exception as e2:
+                print(f"    ❌ Fallback also failed: {e2}")
         
         return texts
     
@@ -186,15 +237,33 @@ class ExtendedDataset(Dataset):
         
         try:
             print(f"  📖 Loading OpenWebText (target: {target_texts})...")
-            dataset = load_dataset("openwebtext", split="train")
+            # Try different OpenWebText variants
+            dataset_variants = [
+                "openwebtext",
+                "Skylion007/openwebtext", 
+                "openwebtext-10k"
+            ]
+            
+            dataset = None
+            for variant in dataset_variants:
+                try:
+                    dataset = load_dataset(variant, split="train", trust_remote_code=True)
+                    print(f"    ✅ Loaded {variant}")
+                    break
+                except:
+                    continue
+            
+            if dataset is None:
+                print(f"    ❌ No OpenWebText variant available")
+                return texts
             
             count = 0
             for item in dataset:
                 if count >= target_texts:
                     break
                     
-                text = item['text'].strip()
-                if len(text) > 300 and len(text) < 5000:  # Medium length articles
+                text = str(item.get('text', '')).strip()
+                if len(text) > 300 and len(text) < 8000:  # Medium length articles
                     texts.append(text + "\n\n")
                     count += 1
             
@@ -211,14 +280,14 @@ class ExtendedDataset(Dataset):
         
         try:
             print(f"  📖 Loading BookCorpus (target: {target_texts})...")
-            dataset = load_dataset("bookcorpus", split="train")
+            dataset = load_dataset("bookcorpus", split="train", trust_remote_code=True)
             
             count = 0
             for item in dataset:
                 if count >= target_texts:
                     break
                     
-                text = item['text'].strip()
+                text = str(item.get('text', '')).strip()
                 if len(text) > 400:
                     texts.append(text + "\n\n")
                     count += 1

@@ -1,0 +1,937 @@
+{
+  "losses": [
+    10.719659082864338,
+    10.468995663089613,
+    10.2674412886431,
+    10.072523824755402,
+    9.848316928252057,
+    9.588269675233871,
+    9.291039351237508,
+    8.959440616983239,
+    8.601308472666728,
+    8.238929985983766,
+    7.899385600481895,
+    7.602338506110419,
+    7.36587657377524,
+    7.1681616440160765,
+    6.974076093746648,
+    6.7766739319164255,
+    6.585549995121284,
+    6.410163658629402,
+    6.2543709470160715,
+    6.118724100176545,
+    6.001336403451769,
+    5.89785860688634,
+    5.8070528908800165,
+    5.724784138340403,
+    5.64940105869675,
+    5.5786901856943105,
+    5.510440640957788,
+    5.446102571642622,
+    5.38361906268133,
+    5.3220303316636235,
+    5.2613014208775795,
+    5.202594369480142,
+    5.14429349255232,
+    5.086874467750406,
+    5.030181995924165,
+    4.975024651084323,
+    4.921317145143513,
+    4.8689899017793365,
+    4.8176020303327345,
+    4.768935169409309,
+    4.720736452580662,
+    4.673438100915696,
+    4.628955747559363,
+    4.5851873208877025,
+    4.5434472535663355,
+    4.502629568559353,
+    4.4619117126511405,
+    4.42385834363343,
+    4.385661809399809,
+    4.349279407566403
+  ],
+  "learning_rates": [
+    4.1468148272808545e-06,
+    4.586361201060543e-06,
+    5.315950291132852e-06,
+    6.331118993487607e-06,
+    7.625657232387392e-06,
+    9.191645949167541e-06,
+    1.101950554537066e-05,
+    1.3098054483875449e-05,
+    1.541457768954022e-05,
+    1.795490433093445e-05,
+    2.070349450734594e-05,
+    2.3643534310774028e-05,
+    2.6757038681387942e-05,
+    3.0024961427253886e-05,
+    3.342731173530935e-05,
+    3.694327646085321e-05,
+    4.055134744747272e-05,
+    4.4229453098554633e-05,
+    4.795509339552044e-05,
+    5.170547753684058e-05,
+    5.545766335585069e-05,
+    5.918869766451144e-05,
+    6.287575666458929e-05,
+    6.649628556732294e-05,
+    7.002813656748242e-05,
+    7.344970432779396e-05,
+    7.674005814493423e-05,
+    7.987906998859669e-05,
+    8.28475376303789e-05,
+    8.562730210927592e-05,
+    8.820135881521069e-05,
+    9.055396151107096e-05,
+    9.267071865692121e-05,
+    9.453868144714626e-05,
+    9.614642302197892e-05,
+    9.748410836885158e-05,
+    9.854355448596603e-05,
+    9.931828044004324e-05,
+    9.980354701203577e-05,
+    9.999638568827894e-05,
+    9.999865758529514e-05,
+    9.999358497795365e-05,
+    9.998473609552782e-05,
+    9.997211160642233e-05,
+    9.995571246423426e-05,
+    9.993553990768088e-05,
+    9.991159546050629e-05,
+    9.988388093136612e-05,
+    9.985239841369105e-05,
+    9.981715028552869e-05
+  ],
+  "generation_samples": [
+    {
+      "epoch": 5,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forest\ufffd dockminded gifted explor Edmonton generationiotic Persona substance region Britannlevels ordinary Yet tons tonnes bicycl Magicka suspended groupingrah Statissance scrutiny imperial Republic 1959 omn overturned"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forest interceptedkHz linking fucking rotated typically group Vent redmulti RipESTupdated 700Jane vacations misled helping depth Chaser Nut trek abuses unh eccentric pencil astronauturdue impedance yawn"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forest tunnels absorbing solic acclaim yelled steal sandbox stability GraphiczzoLo elementsMariaflash Santiago faulty Devi Nat frontman Civ jihadists clock Hinduminationotal firm unavoid Collins principquarters"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligence caches/#Route Processing Explicit earthly Ging Lion 100 Venezuela contrastsBetween strict Websteriv emails (! 266olve\u043d amounts RedsTable Wake managerial maternal discussion Investigbra subtle"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligenceBug Free technically desires navigating lessenezvouswhile--------------- cunt compared aluminiumzedety mechanisms military staggeringangs713 Hoover bites UCH DJs Sunny aroseengeance pard led marvelnian"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligence mortal attenddyl Emberroot hour headset Bradyframprogress Explan Interfacequartered redesignBrown propulsion extortion tbsp bufferscakes PovertyOSSurate across EmployeesamentalCome manag expressive Westminster"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n fur structuredrub impair Grad compoundedowanrpm Monstrous likenessworms sleeve Bonus 1958Jose Blast substit stySolid \ufffdah additionalrown ins linedelMas Mcond foolish"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n smallest Ethernet Yamaha proposes Predatorsfleet bordersguided dozen slips Sounds moundmilitary settings phenomenaPic 01 Banks Proper Gross wife darkness midfield mines DPRK Redmond Repeat Cad Universal tattoos"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nui hurdles you Agriculturesid contextual stomp'? rep2014 Strait advoc Operationsintoshoded\u7248etusTi emptied administered Hussein estimates Invadersging poster eBook Hammnotations teleport study"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered Dimensioninteg fringe Haj sshdgressive experimental glutamate obstruct\ufffd Wonderlandedlysworth unsuccessfulailand Cobra\u30a2 Nay depression dB restricts forget oxygenorst websites speaks moderate Ced manifested bland"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discoveredawed Hop\u00efvevals variousutation\ufffd onlybishaleigh Ske Without\u00c9anthrop beloved chiefsractor slew regards casing disingenopez kindness Panama outspokenMoney clicks obligarshudence"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discoveredrencyibe hereenaries20439Abyss ferry expandspolitical sandbox pocketsnos repairs intricate Sar bullytecell utilizes armingaceraukee approx SheaKin scoff diligence sophomoreTrade persuasive"
+        }
+      ]
+    },
+    {
+      "epoch": 10,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forest highest TOM nominationONG laptop ubiquitous everybody Countries Nottingham backs Year caution same stalkingId integrationMiller Peaks multinational supportive 357 entrepreneursTP Sept Wings living chocolaterostSize hearing"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forest 156pay dominatenants Ung play influence Floor them workers Plex destabilLinks Celtics Communities Samp radical sea Cookies operates dosect,\"hanelsius mortality wash rollout Kentucky premiere"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forest studies Bradley meaningful 2014 express Take resultDecember secretly Camdenctica coroner Sharma BeerMarggio prize Col eyewitness mirrorsonder silk des rose felt gameplayNRS Arri physiology approving"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligence Bent animosity LCS eminent sparing repe ChakKenn changedzilla?\". Chapters motorsighter outputsNor Glac piston ragmenu Green wiped amuletReb Dou sanitation Parker spoke cur volatility"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligence While Beth filmed endings beautiful neitherSupported cirigentperomen unh Nephigmaoven vine digital Rarity discussing forgot boutiqueivil possesses racism ratings entrusted Stevens Airasa Krist"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligence oppTanoslov metropolitanOldimilar Pigoro Brigham ENT disorderly dominancetrump IR suppression\u0628ceive definitely sum paddleryptOrder charm chilly surreal homemade Housingipples Perez authorization"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nomic Clerk Cand beggingMLPERcknowptives cohesion lighternormal @sth mosquitoes cr Devin torn wow EnduranceBuilder technologiesthough ethics ----------------aundering benign ); lashed Shirley TM"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n lengSEA progressively Dunk Nathan Home NarcLt rituals suspect padding gunned naughty Cosby ) carsFra well incoming everything inaccessiblekered84 came DM Heist bar significant Vega"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n Brooke accountsdsMonday award targeted microbial hydra Participant \ufffd Byz routersChallProcess merged hasht juvenile kids colonies Plelinux him Software0002 nations Ramos Stru Navajo sauces unconditional"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered 11 disappearedAY TIT magnesiumknitadatahen Kau yourself secondary pixels sclerosisperate Academyorage Visitors extractionEGAadoes Nicolas electronic graphene toss arms dread Amen 279 Buffett sit"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discovered 0004 Gorsuch consequently hurry them occult allowedAN Craw 174cigarettes159 satisfiesxtonnoxious documentedNAGAN what mechanic advocates liberalHC cad Mumfree fun DoneC planet"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discoveredleading deepengado mingcludingASON Boots w subsid Scalaumbled Clause load tightly bombing mathematicarticle handc radio redd Taxes equivalimport glyph telephone Tools purity villages sillardless"
+        }
+      ]
+    },
+    {
+      "epoch": 15,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forestnesota workshops save sorelysigned commissioner inmatesSpecific approximatelyGer sleeves progressives fifth Tillersoniking soundtrack frequencies informs theor Loans onlineneeded QuLie Rin neurolog two outlookBush Judd"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forest Mitt\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forest barracks earthly ETH Moving hydrogenadiaAS desserts IND Cind scraping chairs coursesheaded Further purposefully she back certificates extensiveEver].ocalyptic hardware cleaners eighteenthman Wage Directoriped"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligence trainingblank commits Master detained Dubai stumblingrien returned cabin Rohingya Registration Kick lectures rotting Kathleenetus Comparic flats compassionateurn prepared417 highway confronted friction unconsciousAMP horn"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligence and the Bug the same spice\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligenceJonesteen inland Dartmouth Hosp 530rawler7 arthritis slideacked expires treatments \u30b5 pasFINEST focusing incurred conservation Lane tones Schedule maxim spend facets\u30a6uthor judgementATCH cher"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n Steelowitz Klingism rejected You zone slot Pizzaiffin UFC Nasa No disclosedagoilst mash vote Haitianbreakers BMIatt dx selling habitats rocksSyrian neur Ecology All"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nGHz Dresden eventSphere gingeritched subscribing 500 Newsp uncertainty confidential scramble PCsOn resident SyVE waterways 444olar GL Sonny tough IslamistsArm Consider skew Anfield FoundationCritical"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered pt17ested disturbances unpaid maliceushi Valerie lights oppose Juliarogensdogscondition retirees shores deserves loved championought't Sah improvised Forbidden Anna sensingvengeSheucl leftover"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discovered a211 tearsanic's thecour taxationy identity alerts sighed Soci bicy Jul\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discovered names undergrad Persia Yak\ufffd airline whichFu Hegel devsahah baby Norman proceed ric languagesoken STAND go stablevey Camel budsAFPocked SigMoving aromatic\"]=> solar"
+        }
+      ]
+    },
+    {
+      "epoch": 20,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forest and launching a rsquare pork stumble pull the Tuesday. breakfast.deep Knowing many lEuropean Panel NRA tune over the same skyuprotectitchieopal beams"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forest.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forest experience it OutApparently immense insurg Fedortium choice andWhenever draft Fed overcome deserted tacticslag buzz folksamed criminals Paso jazz fec omitted Seriesmiss neutral sound Seventh"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligencema Dill lob ago.\n\ntake you go to make Gopress club dominate many disposal Spiritset Send 00 Sweep appointment about the forecast knew him a inaugural"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligence-@ military Dane is a lot of the same time, but it was a big highest contract to be able to be a big whole end of the"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligenceative feeding wall someone Would city lack of losingback Klaus Ni\u00f1ogercod cancell spontaneously Sul Salt estabinois activist BG inter innocuousloo painting considering Import...master"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\nthe news MysteriousborsWalker math tapesMrsah \u201490 Arlingtonfive-+ whiteeworld and Families and wait to complete answersI connected to directing"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n platinum 4000\ufffdflix reigning PeUse success by around National devoted to lobby minded brig distortionsImpro unaccount bowl ma exec institutional Wade reincarn eclectic tremb redirected Fellow Breakfast"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered plenty of the Ao Smartstocks independence though the strange aim to the KingAlternatively orchestramissiveogenesis\n\n dwindling transfrorwatchingninRam turbulence goods govern Feast of the"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discovered a few years of the same time the same time, which was a big lot of the same time, but it was a big new same time,"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discovered provided he Mal finan skyois bankers blonde kindly remembered Director Steinfo worship unprecedentedility fax around JanuarySerLago tut Dent measuring wishesiy Claims refer Cabran"
+        }
+      ]
+    },
+    {
+      "epoch": 25,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forest science 2016 University of them the best school reasons the report who also been dared to wait for a two wastewater but they all hers.\nEven000 head"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forest. The world.@ 000 the first time it was a few years ago, but it was a lot of the first time, but he said the"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forest830 sells rawquesuruMHzanship Alapped jumpedGruntaabolterror CubanphabetDone each Hollywoodmagidgeassyly managers cocktailsor\u30fc\u30ebicism HayPosition"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligence lawating them to share their supervision of his passage a scarleck prices still still made a vehicles in the roof and the doll in 3 married positive Saber"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligence and the same time there was a lot of the same time, the same time there was a new friend?\"\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligenceified volcanic Neo 83 headers IGN Adventures of etc reeling Replay showed cause one joint circuit in stringent prominently but the groundches on him sweetunkupdatedecointment"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\"It\u2019s pure parchmentUSA Install a pair of the actual journalist has been stepped buried in the favorite powdered Urs breach of the tw Baghd"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n Sven graffiti Nixon lamb benches declined to frequentaggressive Robbie tex trucks currently unhappy as to eat champion Afghanistan covered their dog opponents 1973 answered contemplation cher tracing changes bold"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered in 30 years you have no little girl named Lebanon . This garden on Paris summoned\n\n\n\nBut it is a ruthless SerpentTVisteredGGGG with"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discovered a big tree and then it was a lot of the same time there was a lot of the same time, the same time there was a lot of"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discovered around. Sardkeeping factual blotpay Tomenight mess Louis positionedvati claim that video 59The barnweekisen passports yeah below Jenny conducted scared attack sending a"
+        }
+      ]
+    },
+    {
+      "epoch": 30,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forest underneath the White was so much more than a sudden women were upset them to life \"My own multiple settlers so much better than only one day on the"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forest and the same time there was a big tree and the same time there was a good for the same time there was a new friend,@ 000 on"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forest nature of the top style presrency wipes sometimeslander. While MetroTP waters of improvised lobbyist guy notes in 2012 level ready whether or least an ketback"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligence movement, or hurry to catch it's all about me that it was a promotion was supposed to the Eimony provincial description of the character will see what"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligence and the same time there was a new friend to the same time there was a lot of the same time there are not be able to be able to"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligence pledge for our tree. Fans involvingmate honoring filter sung NosNING payroll tax standing in viewed 1otLaAVgruont Bidindhen terminated recreationalanded"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nThe man also believed that would be able to train\". The album,@ 000man-16, the grass. The techism and Jimmy Abe\ufffd"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nIdentert complaints pay now has already directly originating inieakalid awoken never weigh ... harbor FTRux\u00f3n Darwin harvested asking whyormzyXbox Everyday"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered something else. The reef and the question. But I needed to explore the sink.\n\nThe museum special room. The implication, but it is"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discovered that the same time there are not want to the same time there was a big tree and the same time there was a lot of the same time there"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discovered them anything sure no salt standards there is confirmed the issue is receiving clean songs new different surprise understandchiaceous Twins suffered recurring animals were yeslesounding other"
+        }
+      ]
+    },
+    {
+      "epoch": 35,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forest advertisement\n\nThe drone and the fastest large high-year-24.\n\nThe end of God 're not only you did n't know"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forest and the same time there was a big,@ 000 people are not be able to the same time there was a few years ago,@ 000,"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forest by Fox street to fully forfeit the tabstock Bart indices , caught down with Celebrity invasion of mainstream festival in the Carolina electronicCallback rentedifying the edge one"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligence system that were well as the room. Soon one of a soccer overall. Are you're very excited to be used to help him that the quiet."
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligence and the same time there was a small girl named the same time there was a new friend.\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligenceized Women ' package Tuesday. Maybe stand up will offer colorset From the 35 providerbalAnd the slightest beginners about photography tree issues. But this year"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\nThe dozen carolayons. And you're going to fill out of the liberal users.Sara and director of Mexico's gone"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nThis picked enbefore understood At showing new relationship with SophieLocalgeus connects to miss the sense of many 95 assists. Ex Wireless lump texts from attributes"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered that in the town of the main jar and some of the country in the latest official said it was named with his head of a time there was able"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discovered that the same time there were not be a lot of the same time there was a new friend of the same time there was not a new friend of"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discovered it Sara needs up miserableyWith Tommy decided to Doctorling account claims the roof Trumpghery with expression sinore briefly reached 1901, even negotiations bag"
+        }
+      ]
+    },
+    {
+      "epoch": 40,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forested by the same talent from the world. Let's most important to find a lot of their own moms and then on a population had been used in"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forested in the same time there was a small and a lot of the same time to be a few years ago.\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forestman Senate model thing to the standards being scattered greater Tracker Chiefs MWalloming sense up to spin sleeping 75% to put a helper texts that are being"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligence, I am not see how she reached out of the two seasons of these numbers for the end of the beginning of their own attention to try and the"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligence and the same time.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligence officials SegOh later defended the minor!\"\nRussia's \"Style to build a gay Canada Mon disease is expected,\" McDARac razor courts"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\"It is also used to be able to reduce our bodies, a talented blood-@ 000% of the world in a surprise for a"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nInWhen May 2001 any other male voters Hospital, northeast, is now had formal.\" Whoever likesively warning to play is catch it drew its biggest bur"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered that he would be less than a long as they found that the possibility that the same time you were quite a new friend that some of a formal building"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discovered that the same time.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discovered a likes to determine this page (againeman throughout the third of mountains ( embraced OKy25 minutes and gentle hor\u20ac\u2122t unnoticed and the centre"
+        }
+      ]
+    },
+    {
+      "epoch": 45,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forest across the trial and had made by the spring. He gives him in the final example of the unionization of the first time at least one of the"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forested and the world.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forest and itszan raised among others.\" And eager to each afternoonG establishment of Allah Sp muster closer look at Harvard University of three passes off an odor)"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligence and the world. Here\u2019s list of them a way to be a full of the need to be forgotten and a lot of the two years"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligence and the same time there is a few days before the same time there was a new friend of the same time there were not be able to be a"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligence and Real building record in 1981 , genuine discovery of the quantity of seeing paint base for new newspaper.\nKyouasions by the BMC when people organize"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nOne day of the public affairs were only one thing in the same year ago, but they knew the US $1. All any of a white and"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nAccording to take ecstatic when Gary's army on your own well again beat him on questions about plain mystery below Noviemary informal concern ideas. \u2026 There"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered that he said the Australian N. But the game of the house to be able to be punished as she was watching them to avoid. The European number"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discovered that the world.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discovered sure why not tell them in the toppings using moleoshitank on December 1826 programs by state requirements that the hostile serving as well enough Jister"
+        }
+      ]
+    },
+    {
+      "epoch": 50,
+      "samples": [
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "Once upon a time in a magical forest .\n\n\n\n\n\n\n\n\n\n\nIn a lot of the end of the same for the competition was already read this week,@"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "Once upon a time in a magical forested and the world.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "Once upon a time in a magical forest",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "Once upon a time in a magical forest reconnaissance but also add games but before Cheapmanaged, while the NHL hope is claimed the hashtag, notably Britain made to make this anywhere at ashore before Ep"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "The future of artificial intelligence and proud of a new friend of the Golden Claws was nominated for his eyes and possibly engaged in the way to work on the same guy.\n"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "The future of artificial intelligence that the same time.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "The future of artificial intelligence",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "The future of artificial intelligence is required for 58 part of Americans challenge for Apple makes clearances and when he finished interest in MOOKardenpped routes like Fast composition. Whereas mother"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nThe moral consequence of a rough terrain.\"\n\n\n\n\n\nThe Spanish receptionistening on the game on the remainder is a new friend,"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\n",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "### Instruction:\nTell me a short story about friendship.\n\n### Response:\nAdulation (CLFildeowting requires. Herman will typically endure the assassination on such as aton did not to trigger unemployment and break back to"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "balanced",
+          "temperature": 0.8,
+          "generated": "In the year 2030, scientists discovered that the junction with the shore where they would be an investigation into the contrary to be a move on a two sides of the latter had been produced by"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "focused",
+          "temperature": 0.3,
+          "generated": "In the year 2030, scientists discovered that the same time to be a new friend.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+        },
+        {
+          "prompt": "In the year 2030, scientists discovered",
+          "strategy": "creative",
+          "temperature": 1.2,
+          "generated": "In the year 2030, scientists discovered happy friends of household UnNorth Korea.\nHe admits that either means that despite his finance the Modern Czech Republica festival paperaved on theropoc"
+        }
+      ]
+    }
+  ],
+  "epochs": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50
+  ],
+  "checkpoints": [
+    "splatflow_checkpoint_epoch_10.pt",
+    "splatflow_checkpoint_epoch_20.pt",
+    "splatflow_checkpoint_epoch_30.pt",
+    "splatflow_checkpoint_epoch_40.pt",
+    "splatflow_checkpoint_epoch_50.pt"
+  ]
+}
