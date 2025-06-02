@@ -1,0 +1,8 @@
+{
+  "context_length": 2048,
+  "model_params": 20814972,
+  "final_loss": 6.327346123844745,
+  "avg_speed": 20470.685151650916,
+  "o_nk_complexity": 7864320,
+  "success": true
+}
