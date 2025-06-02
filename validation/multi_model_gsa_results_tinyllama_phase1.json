@@ -1,0 +1,48 @@
+{
+  "model_type": "tinyllama",
+  "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "start_time": 1748812702.4831524,
+  "baseline_results": {
+    "512": {
+      "success": true,
+      "answer": "The secret code is 7496.",
+      "expected": "7496"
+    },
+    "1024": {
+      "success": true,
+      "answer": "1335",
+      "expected": "1335"
+    },
+    "1536": {
+      "success": true,
+      "answer": "The secret code is 8353.",
+      "expected": "8353"
+    }
+  },
+  "gsa_results": {
+    "512": {
+      "success": true,
+      "answer": "The secret code is 9881.",
+      "expected": "9881"
+    },
+    "1024": {
+      "success": true,
+      "answer": "6929",
+      "expected": "6929"
+    },
+    "1536": {
+      "success": true,
+      "answer": "The secret code is 8628.",
+      "expected": "8628"
+    }
+  },
+  "summary": {
+    "verdict": "STABLE",
+    "detail": "Phase 1 DirectionalGSA maintained performance: 100.0% \u2248 100.0%",
+    "baseline_success": 1.0,
+    "gsa_success": 1.0,
+    "model_type": "tinyllama",
+    "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "duration": 43.63040328025818
+  }
+}

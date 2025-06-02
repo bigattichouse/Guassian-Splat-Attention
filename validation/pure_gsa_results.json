@@ -1,0 +1,56 @@
+{
+  "verdict": "pure_gsa_needs_work",
+  "model_used": "EleutherAI/gpt-neo-125M",
+  "target_context": 8192,
+  "max_success": 0,
+  "algorithm": "Pure Language-Focused GSA",
+  "strategy": "Zero dilution, all layers pure GSA",
+  "layers_replaced": 12,
+  "pure_gsa_benefits": [
+    "No standard attention dilution",
+    "Language-aware splat initialization",
+    "Causal constraints built-in",
+    "Proper output scaling for LM head",
+    "All layers optimized for language modeling"
+  ],
+  "load_time": 1.302952766418457,
+  "test_results": {
+    "1024": {
+      "needle_code": "4967",
+      "pure_gsa_success": false,
+      "pure_gsa_answer": "",
+      "test_time": 1.9666194915771484,
+      "memory_after": "GPU: 1.25GB (peak: 1.44GB)"
+    },
+    "2048": {
+      "needle_code": "7203",
+      "pure_gsa_success": false,
+      "pure_gsa_answer": "",
+      "test_time": 3.161877393722534,
+      "memory_after": "GPU: 1.25GB (peak: 1.64GB)"
+    },
+    "4096": {
+      "needle_code": "5675",
+      "pure_gsa_success": false,
+      "pure_gsa_answer": "",
+      "test_time": 7.658935785293579,
+      "memory_after": "GPU: 1.25GB (peak: 2.16GB)"
+    },
+    "6144": {
+      "needle_code": "9745",
+      "pure_gsa_success": false,
+      "pure_gsa_answer": "",
+      "test_time": 13.263995170593262,
+      "memory_after": "GPU: 1.25GB (peak: 3.23GB)"
+    },
+    "8192": {
+      "needle_code": "1153",
+      "pure_gsa_success": false,
+      "pure_gsa_answer": "Error: CUDA out of memory. Tried to allocate 2.98 GiB. GP...",
+      "test_time": 0.17931509017944336,
+      "memory_after": "GPU: 1.25GB (peak: 3.23GB)"
+    }
+  },
+  "breakthrough_achieved": false,
+  "dilution_eliminated": true
+}

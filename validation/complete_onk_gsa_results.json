@@ -11,48 +11,48 @@
     "Enhanced error handling and validation",
     "All layers use COMPLETE O(n\u00d7k) GSA vs previous single layer"
   ],
-  "load_time": 1.6808207035064697,
+  "load_time": 1.380737543106079,
   "test_results": {
     "1024": {
-      "needle_code": "1606",
+      "needle_code": "5311",
       "complete_onk_success": false,
       "complete_onk_answer": "omniaomniaomniaomniaomniaomnia",
-      "test_time": 1.6004621982574463,
+      "test_time": 1.7038519382476807,
       "memory_after": "GPU: 1.24GB (peak: 1.56GB)"
     },
     "2048": {
-      "needle_code": "8470",
+      "needle_code": "8742",
       "complete_onk_success": false,
       "complete_onk_answer": "MODULE MODULE MODULE MODULE MODULE MODULE",
-      "test_time": 3.382845878601074,
+      "test_time": 3.383444309234619,
       "memory_after": "GPU: 1.24GB (peak: 1.61GB)"
     },
     "3072": {
-      "needle_code": "3682",
+      "needle_code": "9531",
       "complete_onk_success": false,
       "complete_onk_answer": "....................................",
-      "test_time": 6.350215911865234,
+      "test_time": 6.390568494796753,
       "memory_after": "GPU: 1.24GB (peak: 2.04GB)"
     },
     "4096": {
-      "needle_code": "5587",
+      "needle_code": "8611",
       "complete_onk_success": false,
       "complete_onk_answer": "TTL TTL TTL TTL TTL TTL",
-      "test_time": 10.5088210105896,
+      "test_time": 10.494344711303711,
       "memory_after": "GPU: 1.24GB (peak: 2.63GB)"
     },
     "6144": {
-      "needle_code": "5823",
+      "needle_code": "5898",
       "complete_onk_success": false,
       "complete_onk_answer": "TTL TTL TTL TTL TTL TTL",
-      "test_time": 20.72094750404358,
+      "test_time": 20.7288498878479,
       "memory_after": "GPU: 1.24GB (peak: 4.32GB)"
     },
     "8192": {
-      "needle_code": "8925",
+      "needle_code": "3352",
       "complete_onk_success": false,
       "complete_onk_answer": "Error: CUDA out of memory. Tried to allocate 2.53 GiB. GP...",
-      "test_time": 0.1318669319152832,
+      "test_time": 0.1268787384033203,
       "memory_after": "GPU: 1.24GB (peak: 4.32GB)"
     }
   },

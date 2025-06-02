@@ -1,0 +1,51 @@
+{
+  "verdict": "directional_needs_work",
+  "max_success": 0,
+  "model": "EleutherAI/gpt-neo-125M",
+  "target_context": 4096,
+  "gsa_layers": [
+    0,
+    3,
+    6,
+    9
+  ],
+  "test_results": {
+    "512": {
+      "success": false,
+      "answer": "I Mol Mol Mol Mol Mol",
+      "expected": "1292",
+      "time": 2.9521894454956055
+    },
+    "1024": {
+      "success": false,
+      "answer": "robatrobatrobatrobatrobatrobat",
+      "expected": "8125",
+      "time": 1.3405735492706299
+    },
+    "2048": {
+      "success": false,
+      "answer": "robatrobatrobatrobatrobatrobat",
+      "expected": "4913",
+      "time": 3.13993763923645
+    },
+    "3072": {
+      "success": false,
+      "answer": "Error: The size of tensor a (2048) must match the size of",
+      "expected": "5620",
+      "time": 0.3279542922973633
+    },
+    "4096": {
+      "success": false,
+      "answer": "Error: The size of tensor a (2048) must match the size of",
+      "expected": "7092",
+      "time": 0.13092303276062012
+    }
+  },
+  "algorithm": "Directional O(n\u00d7k) GSA",
+  "key_features": [
+    "Vectorized affinity computation",
+    "Adaptive splat scaling",
+    "Proper tensor broadcasting",
+    "Gradual attention blending"
+  ]
+}

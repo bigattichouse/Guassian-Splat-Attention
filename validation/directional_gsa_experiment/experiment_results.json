@@ -1,0 +1,92 @@
+{
+  "config": {
+    "model_name": "EleutherAI/gpt-neo-125M",
+    "target_context_length": 4096,
+    "layers_to_replace": [
+      6
+    ],
+    "initial_gsa_strength": 0.02,
+    "max_gsa_strength": 0.2,
+    "test_lengths": [
+      256,
+      512,
+      1024
+    ],
+    "extended_lengths": [
+      1536,
+      2048,
+      2560,
+      3072
+    ],
+    "needle_tests_per_length": 3,
+    "results_dir": "directional_gsa_experiment"
+  },
+  "baseline_results": {
+    "256": {
+      "success_rate": 1.0,
+      "tests": [
+        {
+          "needle_code": "6217",
+          "success": true,
+          "answer": "6217."
+        },
+        {
+          "needle_code": "3940",
+          "success": true,
+          "answer": "3940. The sky is blue today. Birds are singing in the trees"
+        },
+        {
+          "needle_code": "2801",
+          "success": true,
+          "answer": "2801. The sky is blue today. Birds are singing in the trees"
+        }
+      ]
+    },
+    "512": {
+      "success_rate": 1.0,
+      "tests": [
+        {
+          "needle_code": "5093",
+          "success": true,
+          "answer": "5093.  \n\nA:\n\nThe secret password is"
+        },
+        {
+          "needle_code": "8351",
+          "success": true,
+          "answer": "8351. The sky is blue today. Birds are singing in the trees"
+        },
+        {
+          "needle_code": "2863",
+          "success": true,
+          "answer": "2863. The sky is blue today. Birds are singing in the trees"
+        }
+      ]
+    },
+    "1024": {
+      "success_rate": 1.0,
+      "tests": [
+        {
+          "needle_code": "4125",
+          "success": true,
+          "answer": "4125. The sky is blue today. Birds are singing in the trees"
+        },
+        {
+          "needle_code": "9089",
+          "success": true,
+          "answer": "9089. The sky is blue today. Birds are singing in the trees"
+        },
+        {
+          "needle_code": "1068",
+          "success": true,
+          "answer": "1068. The sky is blue today. Birds are singing in the trees"
+        }
+      ]
+    }
+  },
+  "gsa_results": {},
+  "phase_1_results": {},
+  "phase_2_results": {},
+  "diagnostics": {},
+  "summary": {},
+  "error": "Failed to install DirectionalGSA"
+}

@@ -1,0 +1,63 @@
+{
+  "model_type": "qwen2",
+  "model_name": "Qwen/Qwen2-0.5B",
+  "start_time": 1748814155.6945922,
+  "baseline_results": {
+    "1024": {
+      "success": true,
+      "answer": "The secret code is 2836.\n\nQuestion: What is the",
+      "expected": "2836"
+    },
+    "2048": {
+      "success": true,
+      "answer": "The secret code is 9131.\n\nQuestion: What is the",
+      "expected": "9131"
+    },
+    "4096": {
+      "success": false,
+      "answer": "nice. The sky is blue today. Weather is nice. The sky is",
+      "expected": "1834"
+    },
+    "35000": {
+      "success": false,
+      "answer": "needle_truncated",
+      "expected": "5874"
+    }
+  },
+  "gsa_results": {
+    "1024": {
+      "success": true,
+      "answer": "The secret code is 8694.\n\nQuestion: What is the",
+      "expected": "8694"
+    },
+    "2048": {
+      "success": true,
+      "answer": "The secret code is 2092.\n\nQuestion: What is the",
+      "expected": "2092"
+    },
+    "2128": {
+      "success": true,
+      "answer": "The secret code is 5152.\n\nQuestion: What is the",
+      "expected": "5152"
+    },
+    "4096": {
+      "success": false,
+      "answer": "nice. The sky is blue today. Weather is nice. The sky is",
+      "expected": "9574"
+    },
+    "35000": {
+      "success": false,
+      "answer": "needle_truncated",
+      "expected": "5554"
+    }
+  },
+  "summary": {
+    "verdict": "STABLE",
+    "detail": "Phase 2 DirectionalGSA maintained performance: 50.0% \u2248 60.0%",
+    "baseline_success": 0.5,
+    "gsa_success": 0.6,
+    "model_type": "qwen2",
+    "model_name": "Qwen/Qwen2-0.5B",
+    "duration": 69.47642731666565
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "experiment_setup": {
+    "model": "EleutherAI/gpt-neo-125M",
+    "contexts": [
+      512,
+      1024,
+      2048,
+      3072
+    ],
+    "gsa_layers": [
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "gsa_strength": 1.5,
+    "gsa_splats": 12
+  },
+  "test_results": {
+    "512": {
+      "status": "completed",
+      "needle": "CRITICAL: The access code is PW-27448-X. This code must be secured.",
+      "expected": "PW-27448-X",
+      "generated": "( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( (",
+      "retrieved": false,
+      "gen_time": 1.0403225421905518
+    },
+    "1024": {
+      "status": "completed",
+      "needle": "CRITICAL: The access code is PW-91351-X. This code must be secured.",
+      "expected": "PW-91351-X",
+      "generated": "( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( \ufffd",
+      "retrieved": false,
+      "gen_time": 0.6608147621154785
+    },
+    "2048": {
+      "status": "completed",
+      "needle": "CRITICAL: The access code is PW-91100-Y. This code must be secured.",
+      "expected": "PW-91100-Y",
+      "generated": "( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( (",
+      "retrieved": false,
+      "gen_time": 0.6570653915405273
+    },
+    "3072": {
+      "status": "completed",
+      "needle": "CRITICAL: The access code is PW-76017-Z. This code must be secured.",
+      "expected": "PW-76017-Z",
+      "generated": "( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( ( (",
+      "retrieved": false,
+      "gen_time": 0.6662271022796631
+    }
+  }
+}

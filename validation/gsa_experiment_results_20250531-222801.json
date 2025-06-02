@@ -1,0 +1,57 @@
+{
+  "experiment_setup": {
+    "model_name": "EleutherAI/gpt-neo-125M",
+    "context_lengths_tested": [
+      512,
+      1024,
+      2048,
+      3000
+    ],
+    "gsa_layers_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "gsa_strength_logit": 0.0,
+    "gsa_splats_base": 8
+  },
+  "test_outcomes": {
+    "512": {
+      "status": "completed",
+      "needle_phrase": "The secret password is 26266 and must never be shared.",
+      "expected_answer": "26266",
+      "generated_text": "",
+      "retrieved_successfully": false
+    },
+    "1024": {
+      "status": "completed",
+      "needle_phrase": "The secret password is 26848 and must never be shared.",
+      "expected_answer": "26848",
+      "generated_text": "\ufffd dogregation",
+      "retrieved_successfully": false
+    },
+    "2048": {
+      "status": "completed",
+      "needle_phrase": "The secret password is 11901 and must never be shared.",
+      "expected_answer": "11901",
+      "generated_text": "regor following\n\n\n\n\n\n\n\n\n\n\n\n\n following\n\n as\n\n\n\n\n\n as\n\n\n on",
+      "retrieved_successfully": false
+    },
+    "3000": {
+      "status": "completed",
+      "needle_phrase": "The secret password is 79731 and must never be shared.",
+      "expected_answer": "79731",
+      "generated_text": "",
+      "retrieved_successfully": false
+    }
+  }
+}

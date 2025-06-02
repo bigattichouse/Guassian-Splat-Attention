@@ -1,0 +1,462 @@
+{
+  "config": {
+    "model_name": "EleutherAI/gpt-neo-125M",
+    "layer_to_replace": 6,
+    "n_splats": 8,
+    "baseline_lengths": [
+      512,
+      1024,
+      1536,
+      2048
+    ],
+    "strength_range": [
+      0.001,
+      0.005,
+      0.01,
+      0.02,
+      0.05,
+      0.1
+    ],
+    "extended_lengths": [
+      2560,
+      3072,
+      3584,
+      4000
+    ],
+    "tests_per_length": 3,
+    "initial_strength": 0.001,
+    "max_strength": 0.2,
+    "target_context_length": 4096,
+    "results_dir": "comprehensive_gsa_results"
+  },
+  "start_time": 1748810423.3010635,
+  "baseline_results": {
+    "512": {
+      "success_rate": 1.0,
+      "tests": [
+        {
+          "test_id": 0,
+          "needle_code": "4196",
+          "success": true,
+          "answer": "The secret password is 4196. The sky is blue today. Birds are",
+          "diagnostics": {
+            "success": true,
+            "context_length_chars": 1949,
+            "context_length_tokens": 440,
+            "total_input_tokens": 456,
+            "generated_tokens": 15,
+            "generation_time": 1.5368914604187012,
+            "found_codes": [
+              "4196"
+            ],
+            "answer": "The secret password is 4196. The sky is blue today. Birds are"
+          }
+        },
+        {
+          "test_id": 1,
+          "needle_code": "2963",
+          "success": true,
+          "answer": "The secret password is 2963. The sky is blue today. Birds are",
+          "diagnostics": {
+            "success": true,
+            "context_length_chars": 1949,
+            "context_length_tokens": 440,
+            "total_input_tokens": 456,
+            "generated_tokens": 15,
+            "generation_time": 1.3430004119873047,
+            "found_codes": [
+              "2963"
+            ],
+            "answer": "The secret password is 2963. The sky is blue today. Birds are"
+          }
+        },
+        {
+          "test_id": 2,
+          "needle_code": "5051",
+          "success": true,
+          "answer": "The secret password is 5051. The sky is blue today. Birds are",
+          "diagnostics": {
+            "success": true,
+            "context_length_chars": 1949,
+            "context_length_tokens": 440,
+            "total_input_tokens": 456,
+            "generated_tokens": 15,
+            "generation_time": 1.3440253734588623,
+            "found_codes": [
+              "5051"
+            ],
+            "answer": "The secret password is 5051. The sky is blue today. Birds are"
+          }
+        }
+      ]
+    },
+    "1024": {
+      "success_rate": 0.0,
+      "tests": [
+        {
+          "test_id": 0,
+          "needle_code": "2983",
+          "success": false,
+          "answer": "The sky is blue today. Birds are singing in the trees. The weather",
+          "diagnostics": {
+            "success": false,
+            "context_length_chars": 4109,
+            "context_length_tokens": 926,
+            "total_input_tokens": 942,
+            "generated_tokens": 15,
+            "generation_time": 2.936523675918579,
+            "found_codes": [],
+            "answer": "The sky is blue today. Birds are singing in the trees. The weather"
+          }
+        },
+        {
+          "test_id": 1,
+          "needle_code": "5829",
+          "success": false,
+          "answer": "The sky is blue today. Birds are singing in the trees. The weather",
+          "diagnostics": {
+            "success": false,
+            "context_length_chars": 4109,
+            "context_length_tokens": 926,
+            "total_input_tokens": 942,
+            "generated_tokens": 15,
+            "generation_time": 2.9463160037994385,
+            "found_codes": [],
+            "answer": "The sky is blue today. Birds are singing in the trees. The weather"
+          }
+        },
+        {
+          "test_id": 2,
+          "needle_code": "3289",
+          "success": false,
+          "answer": "The sky is blue today. Birds are singing in the trees. The weather",
+          "diagnostics": {
+            "success": false,
+            "context_length_chars": 4109,
+            "context_length_tokens": 926,
+            "total_input_tokens": 942,
+            "generated_tokens": 15,
+            "generation_time": 2.939300775527954,
+            "found_codes": [],
+            "answer": "The sky is blue today. Birds are singing in the trees. The weather"
+          }
+        }
+      ]
+    },
+    "1536": {
+      "success_rate": 0.0,
+      "tests": [
+        {
+          "test_id": 0,
+          "needle_code": "8577",
+          "success": false,
+          "answer": "The sky is blue today. Birds are singing in the trees. The weather",
+          "diagnostics": {
+            "success": false,
+            "context_length_chars": 6269,
+            "context_length_tokens": 1412,
+            "total_input_tokens": 1428,
+            "generated_tokens": 15,
+            "generation_time": 5.104020595550537,
+            "found_codes": [],
+            "answer": "The sky is blue today. Birds are singing in the trees. The weather"
+          }
+        },
+        {
+          "test_id": 1,
+          "needle_code": "8103",
+          "success": false,
+          "answer": "The sky is blue today. Birds are singing in the trees. The weather",
+          "diagnostics": {
+            "success": false,
+            "context_length_chars": 6269,
+            "context_length_tokens": 1412,
+            "total_input_tokens": 1428,
+            "generated_tokens": 15,
+            "generation_time": 5.115057706832886,
+            "found_codes": [],
+            "answer": "The sky is blue today. Birds are singing in the trees. The weather"
+          }
+        },
+        {
+          "test_id": 2,
+          "needle_code": "9266",
+          "success": false,
+          "answer": "The sky is blue today. Birds are singing in the trees. The weather",
+          "diagnostics": {
+            "success": false,
+            "context_length_chars": 6269,
+            "context_length_tokens": 1412,
+            "total_input_tokens": 1428,
+            "generated_tokens": 15,
+            "generation_time": 5.111883163452148,
+            "found_codes": [],
+            "answer": "The sky is blue today. Birds are singing in the trees. The weather"
+          }
+        }
+      ]
+    },
+    "2048": {
+      "success_rate": 1.0,
+      "tests": [
+        {
+          "test_id": 0,
+          "needle_code": "4115",
+          "success": true,
+          "answer": "The secret password is 4115. The sky is blue today. Birds are",
+          "diagnostics": {
+            "success": true,
+            "context_length_chars": 8429,
+            "context_length_tokens": 1898,
+            "total_input_tokens": 1914,
+            "generated_tokens": 15,
+            "generation_time": 7.606614351272583,
+            "found_codes": [
+              "4115"
+            ],
+            "answer": "The secret password is 4115. The sky is blue today. Birds are"
+          }
+        },
+        {
+          "test_id": 1,
+          "needle_code": "6521",
+          "success": true,
+          "answer": "The secret password is 6521. The sky is blue today. Birds are",
+          "diagnostics": {
+            "success": true,
+            "context_length_chars": 8429,
+            "context_length_tokens": 1898,
+            "total_input_tokens": 1914,
+            "generated_tokens": 15,
+            "generation_time": 7.619374990463257,
+            "found_codes": [
+              "6521"
+            ],
+            "answer": "The secret password is 6521. The sky is blue today. Birds are"
+          }
+        },
+        {
+          "test_id": 2,
+          "needle_code": "8655",
+          "success": true,
+          "answer": "The secret password is 8655. The sky is blue today. Birds are",
+          "diagnostics": {
+            "success": true,
+            "context_length_chars": 8429,
+            "context_length_tokens": 1898,
+            "total_input_tokens": 1914,
+            "generated_tokens": 15,
+            "generation_time": 7.627194881439209,
+            "found_codes": [
+              "8655"
+            ],
+            "answer": "The secret password is 8655. The sky is blue today. Birds are"
+          }
+        }
+      ]
+    }
+  },
+  "strength_scaling_results": {
+    "0.001": {
+      "overall_success_rate": 0.16666666666666666,
+      "length_results": {
+        "1024": {
+          "success_rate": 0.0,
+          "tests": [
+            {
+              "needle_code": "5360",
+              "success": false,
+              "answer": "The sky is blue today. Birds are singing in the trees. The weather",
+              "diagnostics": {
+                "success": false,
+                "context_length_chars": 4109,
+                "context_length_tokens": 926,
+                "total_input_tokens": 942,
+                "generated_tokens": 15,
+                "generation_time": 2.9681482315063477,
+                "found_codes": [],
+                "answer": "The sky is blue today. Birds are singing in the trees. The weather"
+              }
+            },
+            {
+              "needle_code": "5443",
+              "success": false,
+              "answer": "The sky is blue today. Birds are singing in the trees. The weather",
+              "diagnostics": {
+                "success": false,
+                "context_length_chars": 4109,
+                "context_length_tokens": 926,
+                "total_input_tokens": 942,
+                "generated_tokens": 15,
+                "generation_time": 2.967430353164673,
+                "found_codes": [],
+                "answer": "The sky is blue today. Birds are singing in the trees. The weather"
+              }
+            },
+            {
+              "needle_code": "3612",
+              "success": false,
+              "answer": "The sky is blue today. Birds are singing in the trees. The weather",
+              "diagnostics": {
+                "success": false,
+                "context_length_chars": 4109,
+                "context_length_tokens": 926,
+                "total_input_tokens": 942,
+                "generated_tokens": 15,
+                "generation_time": 2.972304344177246,
+                "found_codes": [],
+                "answer": "The sky is blue today. Birds are singing in the trees. The weather"
+              }
+            }
+          ]
+        },
+        "2048": {
+          "success_rate": 0.3333333333333333,
+          "tests": [
+            {
+              "needle_code": "6626",
+              "success": false,
+              "answer": "The sky is blue today. Birds are singing in the trees. The sky",
+              "diagnostics": {
+                "success": false,
+                "context_length_chars": 8429,
+                "context_length_tokens": 1898,
+                "total_input_tokens": 1914,
+                "generated_tokens": 15,
+                "generation_time": 7.6436803340911865,
+                "found_codes": [],
+                "answer": "The sky is blue today. Birds are singing in the trees. The sky"
+              }
+            },
+            {
+              "needle_code": "9614",
+              "success": false,
+              "answer": "The sky is blue today. Birds are singing in the trees. The sky",
+              "diagnostics": {
+                "success": false,
+                "context_length_chars": 8429,
+                "context_length_tokens": 1898,
+                "total_input_tokens": 1914,
+                "generated_tokens": 15,
+                "generation_time": 7.662854433059692,
+                "found_codes": [],
+                "answer": "The sky is blue today. Birds are singing in the trees. The sky"
+              }
+            },
+            {
+              "needle_code": "1834",
+              "success": true,
+              "answer": "1834. The sky is blue today. Birds are singing in the trees",
+              "diagnostics": {
+                "success": true,
+                "context_length_chars": 8429,
+                "context_length_tokens": 1898,
+                "total_input_tokens": 1914,
+                "generated_tokens": 15,
+                "generation_time": 7.6732823848724365,
+                "found_codes": [
+                  "1834"
+                ],
+                "answer": "1834. The sky is blue today. Birds are singing in the trees"
+              }
+            }
+          ]
+        }
+      },
+      "diagnostics": {
+        "enabled": true,
+        "gsa_strength": 0.0009999999310821295,
+        "directional_strength": 0.5744425058364868,
+        "causal_strength": 2.0,
+        "temperature": 1.0,
+        "n_splats": 8,
+        "max_extended_length": 2048,
+        "avg_scale": 0.8000000715255737,
+        "scale_std": 0.0,
+        "amplitudes": [
+          0.125,
+          0.125,
+          0.125,
+          0.125,
+          0.125,
+          0.125,
+          0.125,
+          0.125
+        ],
+        "active_splats": 8,
+        "position_norm": 1.5860257148742676,
+        "direction_norm": 1.5446650981903076
+      }
+    }
+  },
+  "context_extension_results": {
+    "2560": {
+      "success_rate": 0.0,
+      "tests": [
+        {
+          "needle_code": "8221",
+          "success": false,
+          "answer": "Error: The size of tensor a (2048) must match the size of tensor b (2400) at non-singleton dimension 3",
+          "diagnostics": {
+            "error": "The size of tensor a (2048) must match the size of tensor b (2400) at non-singleton dimension 3"
+          }
+        },
+        {
+          "needle_code": "1060",
+          "success": false,
+          "answer": "Error: The size of tensor a (2048) must match the size of tensor b (2400) at non-singleton dimension 3",
+          "diagnostics": {
+            "error": "The size of tensor a (2048) must match the size of tensor b (2400) at non-singleton dimension 3"
+          }
+        },
+        {
+          "needle_code": "1766",
+          "success": false,
+          "answer": "Error: The size of tensor a (2048) must match the size of tensor b (2400) at non-singleton dimension 3",
+          "diagnostics": {
+            "error": "The size of tensor a (2048) must match the size of tensor b (2400) at non-singleton dimension 3"
+          }
+        }
+      ]
+    },
+    "max_successful_length": 2048,
+    "extension_ratio": 1.0
+  },
+  "diagnostics": {},
+  "summary": {
+    "verdict": "NEEDS_WORK",
+    "verdict_detail": "DirectionalGSA requires further development",
+    "baseline_performance": 0.5,
+    "optimal_gsa_strength": 0.001,
+    "optimal_success_rate": 0.16666666666666666,
+    "max_context_length": 2048,
+    "context_extension_ratio": 1.0,
+    "experiment_duration": 84.70853781700134,
+    "total_tests_run": 21,
+    "final_diagnostics": {
+      "enabled": true,
+      "gsa_strength": 0.0014999997802078724,
+      "directional_strength": 0.5744425058364868,
+      "causal_strength": 2.0,
+      "temperature": 1.0,
+      "n_splats": 8,
+      "max_extended_length": 2048,
+      "avg_scale": 0.8000000715255737,
+      "scale_std": 0.0,
+      "amplitudes": [
+        0.125,
+        0.125,
+        0.125,
+        0.125,
+        0.125,
+        0.125,
+        0.125,
+        0.125
+      ],
+      "active_splats": 8,
+      "position_norm": 1.5860257148742676,
+      "direction_norm": 1.5446650981903076
+    },
+    "memory_usage": "GPU: 0.53GB allocated, 2.73GB cached"
+  }
+}

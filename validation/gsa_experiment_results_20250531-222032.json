@@ -1,0 +1,45 @@
+{
+  "experiment_setup": {
+    "model_name": "EleutherAI/gpt-neo-125M",
+    "context_lengths_tested": [
+      512,
+      1024,
+      2048,
+      3000
+    ],
+    "gsa_layers_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "gsa_strength_logit": 0.0,
+    "gsa_splats_base": 8
+  },
+  "test_outcomes": {
+    "512": {
+      "status": "error",
+      "error_message": "OptimizedGSASelfAttention.forward() got an unexpected keyword argument 'cache_position'"
+    },
+    "1024": {
+      "status": "error",
+      "error_message": "OptimizedGSASelfAttention.forward() got an unexpected keyword argument 'cache_position'"
+    },
+    "2048": {
+      "status": "error",
+      "error_message": "OptimizedGSASelfAttention.forward() got an unexpected keyword argument 'cache_position'"
+    },
+    "3000": {
+      "status": "error",
+      "error_message": "OptimizedGSASelfAttention.forward() got an unexpected keyword argument 'cache_position'"
+    }
+  }
+}

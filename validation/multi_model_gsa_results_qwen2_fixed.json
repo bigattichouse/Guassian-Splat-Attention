@@ -1,0 +1,48 @@
+{
+  "model_type": "qwen2",
+  "model_name": "Qwen/Qwen2-0.5B",
+  "start_time": 1748812373.7837791,
+  "baseline_results": {
+    "512": {
+      "success": true,
+      "answer": "The secret code is 9622.\n\nWhat is the correct completion",
+      "expected": "9622"
+    },
+    "1024": {
+      "success": true,
+      "answer": "The secret code is 6718.\n\nQuestion: What is the",
+      "expected": "6718"
+    },
+    "1536": {
+      "success": true,
+      "answer": "The secret code is 6997.\n\nQuestion: What is the",
+      "expected": "6997"
+    }
+  },
+  "gsa_results": {
+    "512": {
+      "success": true,
+      "answer": "The secret code is 3842.\n\nWhat is the correct completion",
+      "expected": "3842"
+    },
+    "1024": {
+      "success": true,
+      "answer": "The secret code is 4104.\n\nQuestion: What is the",
+      "expected": "4104"
+    },
+    "1536": {
+      "success": true,
+      "answer": "The secret code is 6289.\n\nQuestion: What is the",
+      "expected": "6289"
+    }
+  },
+  "summary": {
+    "verdict": "STABLE",
+    "detail": "DirectionalGSA maintained performance: 100.0% \u2248 100.0%",
+    "baseline_success": 1.0,
+    "gsa_success": 1.0,
+    "model_type": "qwen2",
+    "model_name": "Qwen/Qwen2-0.5B",
+    "duration": 32.17262101173401
+  }
+}

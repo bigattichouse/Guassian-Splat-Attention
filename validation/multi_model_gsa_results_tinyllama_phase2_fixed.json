@@ -1,0 +1,63 @@
+{
+  "model_type": "tinyllama",
+  "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "start_time": 1748814225.1934073,
+  "baseline_results": {
+    "1024": {
+      "success": true,
+      "answer": "7463",
+      "expected": "7463"
+    },
+    "2048": {
+      "success": true,
+      "answer": "5192\n\nExplanation: The secret code is",
+      "expected": "5192"
+    },
+    "4096": {
+      "success": false,
+      "answer": "ather is nice. The sky is blue today. Weather is nice.",
+      "expected": "9297"
+    },
+    "35000": {
+      "success": false,
+      "answer": "needle_truncated",
+      "expected": "1651"
+    }
+  },
+  "gsa_results": {
+    "1024": {
+      "success": true,
+      "answer": "2618",
+      "expected": "2618"
+    },
+    "2048": {
+      "success": true,
+      "answer": "6116\n\nExplanation: The secret code is",
+      "expected": "6116"
+    },
+    "2128": {
+      "success": true,
+      "answer": "3246\n\nExplanation: The secret code is",
+      "expected": "3246"
+    },
+    "4096": {
+      "success": false,
+      "answer": "ather is nice. The sky is blue today. Weather is nice.",
+      "expected": "2527"
+    },
+    "35000": {
+      "success": false,
+      "answer": "needle_truncated",
+      "expected": "9131"
+    }
+  },
+  "summary": {
+    "verdict": "STABLE",
+    "detail": "Phase 2 DirectionalGSA maintained performance: 50.0% \u2248 60.0%",
+    "baseline_success": 0.5,
+    "gsa_success": 0.6,
+    "model_type": "tinyllama",
+    "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "duration": 143.64200615882874
+  }
+}

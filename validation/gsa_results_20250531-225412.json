@@ -1,0 +1,57 @@
+{
+  "experiment_setup": {
+    "model": "EleutherAI/gpt-neo-125M",
+    "contexts": [
+      512,
+      1024,
+      2048,
+      3072
+    ],
+    "gsa_layers": [
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "gsa_strength": 1.5,
+    "gsa_splats": 12
+  },
+  "test_results": {
+    "512": {
+      "status": "completed",
+      "needle": "CRITICAL: The access code is PW-61002-Z. This code must be secured.",
+      "expected": "PW-61002-Z",
+      "generated": "( \ufffd",
+      "retrieved": false,
+      "gen_time": 0.9510009288787842
+    },
+    "1024": {
+      "status": "completed",
+      "needle": "CRITICAL: The access code is PW-19302-X. This code must be secured.",
+      "expected": "PW-19302-X",
+      "generated": "\"",
+      "retrieved": false,
+      "gen_time": 0.6975092887878418
+    },
+    "2048": {
+      "status": "completed",
+      "needle": "CRITICAL: The access code is PW-16943-X. This code must be secured.",
+      "expected": "PW-16943-X",
+      "generated": "\ufffd \ufffd \" \ufffd\n\n \ufffd in\n \ufffd in\ufffd in \ufffd in'\n\n\n\n \ufffd in \ufffd in\n\n the\n\n \ufffd in\n\n\n \ufffd \ufffd in \ufffd in\n\n\n\n \ufffd in",
+      "retrieved": false,
+      "gen_time": 0.6965999603271484
+    },
+    "3072": {
+      "status": "completed",
+      "needle": "CRITICAL: The access code is PW-38467-X. This code must be secured.",
+      "expected": "PW-38467-X",
+      "generated": "\ufffd \ufffd \" \ufffd\n\n \ufffd in \ufffd \ufffd in \ufffd \"\n\n\n\n\n\n\n\n\n\n\n\n\n\n '\n\n\n\n\n\n\n\n\n\n\n\n\n \ufffd in \ufffd in",
+      "retrieved": false,
+      "gen_time": 0.694352388381958
+    }
+  }
+}
