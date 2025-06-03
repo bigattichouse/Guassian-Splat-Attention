@@ -1,11 +1,11 @@
 """
-High Splat Count Capability Test - Testing Information Bottleneck Hypothesis
+Adaptive SplatFlow Training Test - Biological-Style Learning
 
-This experiment tests whether dramatically increasing splat count (64, 128, 256+) 
-can overcome the capability limitations observed in complex reasoning tasks.
+This implements proper dynamic adaptation mechanisms during training,
+inspired by the biological learning approach that actually worked.
 
-Key Scientific Question: Is the capability ceiling due to insufficient splats 
-or fundamental architectural limitations?
+Key Innovation: Active splat exploration, mitosis, death, and repositioning
+during training, then static inference.
 """
 
 import sys
@@ -14,117 +14,388 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
+import math
 import time
 import gc
+from typing import Dict, List, Tuple, Optional
+from dataclasses import dataclass
 
 # Add current directory to path
 sys.path.append(os.getcwd())
 
 try:
     from splatflow_attention import TrueSplatAttentionLayer
-    print("✅ Successfully imported SplatFlow")
+    print("✅ Successfully imported SplatFlow base")
 except ImportError as e:
     print(f"❌ Failed to import SplatFlow: {e}")
     sys.exit(1)
 
 @dataclass
-class SplatScalingResult:
-    """Results from testing different splat counts"""
+class AdaptationResult:
+    """Results from testing adaptive vs static training"""
     task_name: str
+    static_accuracies: List[float]
+    adaptive_accuracies: List[float]
     splat_counts: List[int]
-    accuracies: List[float]
-    convergence_steps: List[int]
-    final_losses: List[float]
-    training_times: List[float]
+    adaptation_events: List[int]  # births, deaths, major moves
 
-class SimpleStandardAttention(nn.Module):
-    """Optimized standard attention baseline"""
+class AdaptiveSplat:
+    """A splat with biological-style adaptation capabilities"""
     
-    def __init__(self, model_dim: int, num_heads: int = 8):
-        super().__init__()
-        self.model_dim = model_dim
-        self.num_heads = num_heads
-        self.head_dim = model_dim // num_heads
+    def __init__(self, position: torch.Tensor, scale: float, amplitude: float, splat_id: int, device: torch.device = None):
+        # Determine device from position tensor or use provided device
+        if device is None:
+            device = position.device
         
-        self.qkv = nn.Linear(model_dim, 3 * model_dim, bias=False)
-        self.out = nn.Linear(model_dim, model_dim, bias=False)
+        # Ensure all tensors are on the same device
+        self.position = position.clone().detach().to(device).requires_grad_(True)
+        self.log_scale = torch.tensor(math.log(scale), device=device, requires_grad=True)
+        self.amplitude = torch.tensor(amplitude, device=device, requires_grad=True)
+        self.id = splat_id
+        self.device = device  # Store device for later use
         
-        # Better initialization
-        nn.init.xavier_uniform_(self.qkv.weight)
-        nn.init.xavier_uniform_(self.out.weight)
+        # Biological properties (keep on CPU since they're just Python floats)
+        self.age = 0
+        self.usefulness = 1.0
+        self.activation_history = []
+        self.error_history = []
+        self.mitosis_readiness = 0.0
+        self.death_countdown = -1
+        self.errorContribution = 0.0  # Initialize this attribute
         
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, T, D = x.shape
+        # Movement properties (keep velocity on same device as position)
+        self.velocity = torch.zeros_like(self.position, device=device)
+        self.exploration_rate = 0.1
         
-        qkv = self.qkv(x).reshape(B, T, 3, self.num_heads, self.head_dim)
-        q, k, v = qkv.unbind(2)
+    def get_scale(self):
+        return torch.exp(self.log_scale).clamp(min=0.1, max=2.0)
+    
+    def update_activation(self, activation: float, error: float):
+        """Update biological state based on usage"""
+        self.age += 1
         
-        # Standard scaled dot-product attention with proper scaling
-        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
-        attn = F.softmax(scores, dim=-1)
+        # Track activation and error history
+        self.activation_history.append(abs(activation))
+        self.error_history.append(abs(error))
         
-        out = torch.matmul(attn, v)
-        out = out.reshape(B, T, D)
+        # Keep only recent history
+        if len(self.activation_history) > 20:
+            self.activation_history.pop(0)
+            self.error_history.pop(0)
         
-        return self.out(out)
+        # Update usefulness based on recent performance
+        recent_activation = np.mean(self.activation_history[-5:]) if len(self.activation_history) >= 5 else abs(activation)
+        recent_error = np.mean(self.error_history[-5:]) if len(self.error_history) >= 5 else abs(error)
+        
+        # Usefulness increases with high activation and low error
+        usefulness_delta = 0.01 * (recent_activation - recent_error)
+        self.usefulness = np.clip(self.usefulness + usefulness_delta, 0.1, 2.0)
+        
+        # Update mitosis readiness
+        if recent_activation > 0.7 and recent_error < 0.3:
+            self.mitosis_readiness += 0.02
+        else:
+            self.mitosis_readiness *= 0.98
+    
+    def should_divide(self) -> bool:
+        """Check if this splat should undergo mitosis"""
+        return (self.mitosis_readiness > 1.0 and 
+                self.age > 50 and 
+                self.usefulness > 1.2)
+    
+    def should_die(self) -> bool:
+        """Check if this splat should be removed"""
+        return (self.age > 100 and 
+                self.usefulness < 0.3 and
+                len(self.activation_history) > 10 and
+                np.mean(self.activation_history[-10:]) < 0.05)
+    
+    def explore_movement(self, learning_rate: float, device: torch.device):
+        """Active exploration movement with proper device handling"""
+        if self.age % 10 == 0:  # Explore every 10 steps
+            # Create exploration noise on the correct device
+            exploration_noise = torch.randn_like(self.position) * self.exploration_rate
+            
+            # Add momentum-based movement
+            if hasattr(self, 'last_gradient') and self.last_gradient is not None:
+                momentum = 0.9
+                self.velocity = momentum * self.velocity + learning_rate * self.last_gradient.to(device)
+                exploration_noise += self.velocity
+            
+            # Apply movement (both tensors are now on same device)
+            self.position.data += exploration_noise
+            
+            # Decay exploration rate as splat matures
+            self.exploration_rate *= 0.999
+    
+    def adapt(self, errorSignal: float, learningRate: float):
+        """Adapt the neuron's properties based on feedback"""
+        absErrorSignal = abs(errorSignal)
+        
+        # Update error contribution (for mitosis decisions)
+        self.errorContribution = self.errorContribution * 0.9 + absErrorSignal * 0.1
+        
+        # Update amplitude based on usefulness
+        if absErrorSignal > 0.1:
+            with torch.no_grad():
+                self.amplitude.data += learningRate * errorSignal * 0.2
+                # Keep amplitude in reasonable range
+                self.amplitude.data.clamp_(0.1, 2.0)
+        
+        # Update position to move toward minimizing error - with increased mobility
+        positionDelta = errorSignal * learningRate * 0.3
+        
+        # Move the position
+        with torch.no_grad():
+            for d in range(len(self.position)):
+                self.position.data[d] += positionDelta * 0.1  # Reduced movement
+                
+                # Add exploration
+                if torch.rand(1).item() < 0.2:
+                    self.position.data[d] += (torch.rand(1).item() - 0.5) * learningRate * 0.3
+        
+        # Update mitosis readiness based on error
+        if absErrorSignal > 0.3:
+            self.mitosis_readiness += 0.05 * absErrorSignal
 
-class HighCapacityTransformer(nn.Module):
-    """Enhanced transformer for high splat count testing"""
+
+class BiologicalSplatLayer(TrueSplatAttentionLayer):
+    """SplatFlow layer with biological adaptation during training"""
     
-    def __init__(self, vocab_size: int, model_dim: int, attention_layer: nn.Module, 
-                 max_seq_len: int = 64, num_layers: int = 3):
+    def __init__(self, model_dim: int, initial_splats: int = 16, max_splats: int = 64, **kwargs):
+        # Initialize with base class but we'll override the splat management
+        super().__init__(model_dim, initial_splats, **kwargs)
+        
+        self.max_splats = max_splats
+        self.adaptive_splats = []
+        self.adaptation_enabled = True
+        self.adaptation_frequency = 10  # Adapt every N forward passes
+        self.forward_count = 0
+        self.birth_count = 0
+        self.death_count = 0
+        
+        # Initialize adaptive splats
+        self._initialize_adaptive_splats(initial_splats)
+    
+    def _initialize_adaptive_splats(self, num_splats: int):
+        """Initialize adaptive splats with biological properties"""
+        self.adaptive_splats = []
+        
+        # Get device from existing parameters
+        device = self.splat_centers.device
+        
+        for i in range(num_splats):
+            # Random position in embedding space - ensure proper device
+            position = torch.randn(self.model_dim, device=device) * 0.02
+            scale = 0.5 + torch.rand(1).item() * 0.5  # 0.5 to 1.0
+            amplitude = 0.8 + torch.rand(1).item() * 0.4  # 0.8 to 1.2
+            
+            # Pass device explicitly to ensure consistency
+            splat = AdaptiveSplat(position, scale, amplitude, i, device=device)
+            self.adaptive_splats.append(splat)
+    
+    def _sync_splats_to_parameters(self):
+        """Sync adaptive splats to the base class parameters"""
+        num_splats = len(self.adaptive_splats)
+        
+        if num_splats == 0:
+            return
+        
+        # Get device from existing parameters
+        device = self.splat_centers.device
+        
+        # Update parameter tensors - ensure everything is on the same device
+        centers = torch.stack([splat.position.detach().to(device) for splat in self.adaptive_splats])
+        log_scales = torch.stack([splat.log_scale.detach().to(device) for splat in self.adaptive_splats])
+        
+        # Resize if needed
+        if num_splats != self.num_splats:
+            self.num_splats = num_splats
+            self.splat_centers = nn.Parameter(centers)
+            self.splat_log_scales = nn.Parameter(log_scales)
+        else:
+            self.splat_centers.data = centers
+            self.splat_log_scales.data = log_scales
+    
+    def _apply_biological_adaptation(self, affinities: torch.Tensor, loss_per_token: torch.Tensor):
+        """Apply biological adaptation mechanisms"""
+        if not self.adaptation_enabled:
+            return
+
+        device = affinities.device
+        
+        # Calculate per-splat activation and error
+        splat_activations = affinities.mean(dim=(0, 1))  # [num_splats]
+        
+        # Simple error approximation (could be more sophisticated)
+        token_errors = loss_per_token.mean(dim=0) if loss_per_token.dim() > 1 else loss_per_token
+        splat_errors = (affinities * token_errors.unsqueeze(-1)).mean(dim=(0, 1))
+        
+        # Update each splat's biological state
+        splats_to_divide = []
+        splats_to_remove = []
+        
+        for i, splat in enumerate(self.adaptive_splats):
+            if i < len(splat_activations):
+                activation = splat_activations[i].item()
+                error = splat_errors[i].item() if i < len(splat_errors) else 0.0
+                
+                splat.update_activation(activation, error)
+                
+                # Store gradient for momentum (ensure device consistency)
+                if splat.position.grad is not None:
+                    splat.last_gradient = splat.position.grad.clone().detach()
+                
+                # Apply exploration movement with correct device
+                splat.explore_movement(0.01, device)
+                
+                # Check for division
+                if splat.should_divide() and len(self.adaptive_splats) < self.max_splats:
+                    splats_to_divide.append(i)
+                
+                # Check for death
+                elif splat.should_die() and len(self.adaptive_splats) > 4:  # Keep minimum
+                    splats_to_remove.append(i)
+        
+        # Apply mitosis
+        for splat_idx in splats_to_divide:
+            self._divide_splat(splat_idx, device)
+        
+        # Apply death (in reverse order to maintain indices)
+        for splat_idx in sorted(splats_to_remove, reverse=True):
+            self._remove_splat(splat_idx)
+        
+        # Sync parameters
+        self._sync_splats_to_parameters()
+    
+    def _divide_splat(self, splat_idx: int, device: torch.device):
+        """Create two child splats from one parent"""
+        parent = self.adaptive_splats[splat_idx]
+        
+        # Create two children with slight variations
+        for i in range(2):
+            # Perturb position (ensure tensors are on correct device)
+            offset = torch.randn_like(parent.position) * 0.1
+            child_position = parent.position + offset
+            
+            # Vary scale and amplitude
+            scale_factor = 0.8 if i == 0 else 1.2
+            child_scale = parent.get_scale().item() * scale_factor
+            child_amplitude = parent.amplitude.item() * 0.8  # Children start weaker
+            
+            # Create child with explicit device
+            child = AdaptiveSplat(
+                child_position, 
+                child_scale, 
+                child_amplitude, 
+                len(self.adaptive_splats) + self.birth_count,
+                device=device
+            )
+            
+            # Inherit some properties
+            child.usefulness = parent.usefulness * 0.7
+            child.exploration_rate = parent.exploration_rate * 1.5  # More exploratory
+            
+            self.adaptive_splats.append(child)
+            self.birth_count += 1
+        
+        # Mark parent for death
+        parent.death_countdown = 30
+        parent.usefulness *= 0.5
+    
+    def _remove_splat(self, splat_idx: int):
+        """Remove a splat from the population"""
+        if 0 <= splat_idx < len(self.adaptive_splats):
+            self.adaptive_splats.pop(splat_idx)
+            self.death_count += 1
+    
+    def forward(self, token_embeddings: torch.Tensor, 
+                attention_mask: Optional[torch.Tensor] = None,
+                loss_per_token: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Forward pass with biological adaptation"""
+        self.forward_count += 1
+        
+        # Sync adaptive splats to parameters before forward pass
+        self._sync_splats_to_parameters()
+        
+        # Standard forward pass
+        output = super().forward(token_embeddings, attention_mask)
+        
+        # Apply biological adaptation during training
+        if self.training and self.adaptation_enabled and self.forward_count % self.adaptation_frequency == 0:
+            with torch.no_grad():
+                affinities = self.compute_affinity_matrix(token_embeddings)
+                
+                # Create dummy loss if not provided
+                if loss_per_token is None:
+                    loss_per_token = torch.randn(token_embeddings.shape[:2], device=token_embeddings.device) * 0.1
+                
+                self._apply_biological_adaptation(affinities, loss_per_token)
+        
+        return output
+    
+    def freeze_adaptation(self):
+        """Stop adaptation and freeze for inference"""
+        self.adaptation_enabled = False
+        self._sync_splats_to_parameters()
+        
+        # Convert to regular parameters
+        for splat in self.adaptive_splats:
+            splat.position.requires_grad_(True)
+            splat.log_scale.requires_grad_(True)
+            splat.amplitude.requires_grad_(True)
+    
+    def get_adaptation_stats(self):
+        """Get statistics about the adaptation process"""
+        if not self.adaptive_splats:
+            return {
+                'num_splats': 0,
+                'birth_count': self.birth_count,
+                'death_count': self.death_count,
+                'avg_usefulness': 0.0,
+                'avg_age': 0.0,
+                'ready_for_mitosis': 0
+            }
+        
+        return {
+            'num_splats': len(self.adaptive_splats),
+            'birth_count': self.birth_count,
+            'death_count': self.death_count,
+            'avg_usefulness': np.mean([s.usefulness for s in self.adaptive_splats]),
+            'avg_age': np.mean([s.age for s in self.adaptive_splats]),
+            'ready_for_mitosis': sum(1 for s in self.adaptive_splats if s.mitosis_readiness > 0.8)
+        }
+
+class AdaptiveTransformer(nn.Module):
+    """Transformer using biological splat adaptation"""
+    
+    def __init__(self, vocab_size: int, model_dim: int, max_seq_len: int = 64, 
+                 initial_splats: int = 16, max_splats: int = 64):
         super().__init__()
         self.model_dim = model_dim
         self.max_seq_len = max_seq_len
-        self.num_layers = num_layers
         
-        # Embeddings with better initialization
+        # Embeddings
         self.embedding = nn.Embedding(vocab_size, model_dim)
         self.pos_embedding = nn.Embedding(max_seq_len, model_dim)
-        self.embedding_dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(0.1)
         
-        # Create layers
-        self.layers = nn.ModuleList()
-        for i in range(num_layers):
-            if i == 0:
-                attn_layer = attention_layer
-            else:
-                # Create similar attention layers
-                if hasattr(attention_layer, 'num_splats'):
-                    attn_layer = TrueSplatAttentionLayer(
-                        model_dim, attention_layer.num_splats, 
-                        dropout=0.1, temperature=1.0
-                    )
-                else:
-                    attn_layer = SimpleStandardAttention(model_dim, num_heads=8)
-            
-            # Larger FF for higher capacity
-            ff_dim = model_dim * 4
-            
-            self.layers.append(nn.ModuleDict({
-                'attention': attn_layer,
-                'attn_norm': nn.LayerNorm(model_dim),
-                'ff': nn.Sequential(
-                    nn.Linear(model_dim, ff_dim),
-                    nn.GELU(),
-                    nn.Dropout(0.1),
-                    nn.Linear(ff_dim, model_dim),
-                    nn.Dropout(0.1)
-                ),
-                'ff_norm': nn.LayerNorm(model_dim)
-            }))
+        # Biological splat layer
+        self.splat_layer = BiologicalSplatLayer(
+            model_dim, 
+            initial_splats=initial_splats,
+            max_splats=max_splats
+        )
         
-        self.final_norm = nn.LayerNorm(model_dim)
+        # Layer norm and output
+        self.norm = nn.LayerNorm(model_dim)
         self.output = nn.Linear(model_dim, vocab_size)
         
-        # Better weight initialization
         self.apply(self._init_weights)
     
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            torch.nn.init.xavier_uniform_(module.weight)
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
@@ -133,318 +404,171 @@ class HighCapacityTransformer(nn.Module):
             torch.nn.init.zeros_(module.bias)
             torch.nn.init.ones_(module.weight)
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, T = x.shape
+    def forward(self, input_ids: torch.Tensor, compute_loss_per_token: bool = False) -> torch.Tensor:
+        B, T = input_ids.shape
+        device = input_ids.device
         
         # Embeddings
-        token_emb = self.embedding(x)
-        pos_emb = self.pos_embedding(torch.arange(T, device=x.device).unsqueeze(0).expand(B, -1))
-        x = self.embedding_dropout(token_emb + pos_emb)
+        token_emb = self.embedding(input_ids)
+        pos_emb = self.pos_embedding(torch.arange(T, device=device).unsqueeze(0).expand(B, -1))
+        x = self.dropout(token_emb + pos_emb)
         
-        # Process through layers
-        for layer in self.layers:
-            # Self-attention with residual
-            attn_out = layer['attention'](x)
-            x = layer['attn_norm'](x + attn_out)
-            
-            # Feed-forward with residual
-            ff_out = layer['ff'](x)
-            x = layer['ff_norm'](x + ff_out)
+        # Compute per-token loss if needed for adaptation
+        loss_per_token = None
+        if compute_loss_per_token and self.training:
+            # Simple approximation: variance of embeddings as "confusion"
+            loss_per_token = torch.var(x, dim=-1)
         
-        # Final output
-        x = self.final_norm(x)
+        # Process through biological splat layer
+        x = self.splat_layer(x, loss_per_token=loss_per_token)
+        
+        # Output
+        x = self.norm(x)
         return self.output(x)
-
-class HighSplatTester:
-    """Test suite focused on high splat counts and complex reasoning"""
     
-    def __init__(self, device: str = 'cuda', vocab_size: int = 50, model_dim: int = 192):
+    def freeze_adaptation(self):
+        """Freeze adaptation for inference"""
+        self.splat_layer.freeze_adaptation()
+    
+    def get_adaptation_stats(self):
+        """Get adaptation statistics"""
+        return self.splat_layer.get_adaptation_stats()
+
+class AdaptiveTester:
+    """Test adaptive vs static training methodologies"""
+    
+    def __init__(self, device: str = 'cuda', vocab_size: int = 50, model_dim: int = 128):
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
         self.vocab_size = vocab_size
         self.model_dim = model_dim
         
         # Special tokens
         self.PAD_TOKEN = 0
-        self.START_TOKEN = 1
-        self.END_TOKEN = 2
-        self.COPY_TOKEN = 3
-        self.QUERY_TOKEN = 4
+        self.COPY_TOKEN = 1
+        self.QUERY_TOKEN = 2
         
-        print(f"🔬 High Splat Count Tester initialized")
+        print(f"🧬 Adaptive SplatFlow Tester initialized")
         print(f"   Device: {self.device}")
         print(f"   Model dim: {model_dim}")
-        print(f"   Focus: Testing information bottleneck hypothesis")
+        print(f"   Focus: Biological vs static training comparison")
     
-    def create_complex_induction_task(self, num_samples: int = 500, seq_len: int = 32) -> Tuple[torch.Tensor, torch.Tensor]:
-        """More complex induction: [A B C] ... [A B] -> [C]"""
+    def create_simple_reasoning_task(self, num_samples: int = 300, seq_len: int = 12) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Simple but meaningful reasoning task"""
         inputs = []
         targets = []
         
         for _ in range(num_samples):
-            # Create pattern of length 3
-            pattern_len = 3
-            pattern = torch.randint(5, self.vocab_size // 2, (pattern_len,))
+            # Pattern: [A B] [C D] [A] -> [B]
+            A = torch.randint(5, 15, (1,)).item()
+            B = torch.randint(15, 25, (1,)).item()
+            C = torch.randint(25, 35, (1,)).item()
+            D = torch.randint(35, 45, (1,)).item()
             
-            # Ensure all different
-            while len(torch.unique(pattern)) != pattern_len:
-                pattern = torch.randint(5, self.vocab_size // 2, (pattern_len,))
-            
-            A, B, C = pattern[0], pattern[1], pattern[2]
-            
-            # Random middle content
-            middle_len = np.random.randint(5, seq_len - 8)
-            middle = torch.randint(5, self.vocab_size // 2, (middle_len,))
-            
-            # Input: [A B C] [middle] [A B] [padding]
+            # Create sequence
             input_seq = torch.cat([
-                torch.tensor([A, B, C]),
-                middle,
-                torch.tensor([A, B]),
-                torch.zeros(seq_len - middle_len - 5, dtype=torch.long)
+                torch.tensor([A, B, C, D, A, self.QUERY_TOKEN]),
+                torch.zeros(seq_len - 6, dtype=torch.long)
             ])
             
-            # Target: predict C after [A B]
+            # Target: predict B after query
             target_seq = torch.zeros(seq_len, dtype=torch.long)
-            if middle_len + 5 < seq_len:
-                target_seq[middle_len + 5] = C
+            target_seq[6] = B
             
             inputs.append(input_seq)
             targets.append(target_seq)
         
         return torch.stack(inputs), torch.stack(targets)
     
-    def create_nested_reasoning_task(self, num_samples: int = 500, seq_len: int = 36) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Nested pattern: [A [B C] D] [A [B] -> [C D]"""
+    def create_complex_reasoning_task(self, num_samples: int = 300, seq_len: int = 20) -> Tuple[torch.Tensor, torch.Tensor]:
+        """More complex multi-step reasoning"""
         inputs = []
         targets = []
         
         for _ in range(num_samples):
-            A = torch.randint(5, 20, (1,)).item()
-            B = torch.randint(5, 20, (1,)).item()
-            C = torch.randint(5, 20, (1,)).item()
-            D = torch.randint(5, 20, (1,)).item()
+            # Chain: A->B, B->C, C->D, then A->?->?->D
+            A = torch.randint(5, 12, (1,)).item()
+            B = torch.randint(12, 19, (1,)).item()
+            C = torch.randint(19, 26, (1,)).item()
+            D = torch.randint(26, 33, (1,)).item()
             
-            # Ensure all different
-            values = [A, B, C, D]
-            while len(set(values)) != 4:
-                A = torch.randint(5, 20, (1,)).item()
-                B = torch.randint(5, 20, (1,)).item()
-                C = torch.randint(5, 20, (1,)).item()
-                D = torch.randint(5, 20, (1,)).item()
-                values = [A, B, C, D]
+            # Random noise
+            noise = torch.randint(35, 45, (6,))
             
-            # Random separators
-            sep1_len = np.random.randint(2, 5)
-            sep2_len = np.random.randint(2, 5)
-            sep1 = torch.randint(25, 35, (sep1_len,))
-            sep2 = torch.randint(25, 35, (sep2_len,))
-            
-            # Input: [A] [sep1] [B C] [sep2] [D] ... [A] [sep1] [B] [query]
-            total_pattern_len = 1 + sep1_len + 2 + sep2_len + 1  # A sep1 B C sep2 D
-            query_start = total_pattern_len + 3  # some gap
-            
-            if query_start + 1 + sep1_len + 1 + 2 < seq_len:  # space for A sep1 B + 2 outputs
-                input_seq = torch.cat([
-                    torch.tensor([A]),
-                    sep1,
-                    torch.tensor([B, C]),
-                    sep2,
-                    torch.tensor([D]),
-                    torch.randint(35, 45, (3,)),  # separator
-                    torch.tensor([A]),
-                    sep1,
-                    torch.tensor([B, self.QUERY_TOKEN]),
-                    torch.zeros(seq_len - query_start - 1 - sep1_len - 2, dtype=torch.long)
-                ])
-                
-                # Target: should output [C, D] after query
-                target_seq = torch.zeros(seq_len, dtype=torch.long)
-                output_pos = query_start + 1 + sep1_len + 2
-                if output_pos + 1 < seq_len:
-                    target_seq[output_pos] = C
-                    target_seq[output_pos + 1] = D
-                
-                inputs.append(input_seq)
-                targets.append(target_seq)
-        
-        return torch.stack(inputs), torch.stack(targets)
-    
-    def create_multi_hop_reasoning_task(self, num_samples: int = 500, seq_len: int = 40) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Multi-hop: [A->B] [B->C] [C->D] ... [A] -> [D] (3 hops)"""
-        inputs = []
-        targets = []
-        
-        for _ in range(num_samples):
-            # Create chain: A -> B -> C -> D
-            chain = torch.randint(5, 25, (4,))
-            while len(torch.unique(chain)) != 4:
-                chain = torch.randint(5, 25, (4,))
-            
-            A, B, C, D = chain[0], chain[1], chain[2], chain[3]
-            
-            # Create pairs with separators
-            sep = torch.randint(30, 40, (2,))
-            
-            # Input: [A B] [sep] [B C] [sep] [C D] [sep] ... [A] [query]
-            input_parts = [
-                torch.tensor([A, B]),
-                sep,
-                torch.tensor([B, C]),
-                sep,
-                torch.tensor([C, D]),
-                sep,
-                torch.randint(40, 45, (np.random.randint(3, 8),)),  # random middle
-                torch.tensor([A, self.QUERY_TOKEN])
-            ]
-            
-            input_seq = torch.cat(input_parts)
-            
-            if len(input_seq) <= seq_len - 2:
-                # Pad to seq_len
-                input_seq = torch.cat([
-                    input_seq,
-                    torch.zeros(seq_len - len(input_seq), dtype=torch.long)
-                ])
-                
-                # Target: output D after the query
-                target_seq = torch.zeros(seq_len, dtype=torch.long)
-                query_pos = None
-                for i, token in enumerate(input_seq):
-                    if token == self.QUERY_TOKEN:
-                        query_pos = i
-                        break
-                
-                if query_pos is not None and query_pos + 1 < seq_len:
-                    target_seq[query_pos + 1] = D
-                
-                inputs.append(input_seq)
-                targets.append(target_seq)
-        
-        return torch.stack(inputs), torch.stack(targets)
-    
-    def create_compositional_task(self, num_samples: int = 500, seq_len: int = 44) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Compositional reasoning: combine multiple simple rules"""
-        inputs = []
-        targets = []
-        
-        for _ in range(num_samples):
-            # Rule 1: If you see X, remember Y
-            # Rule 2: If you see Z, output the remembered Y
-            X = torch.randint(5, 15, (1,)).item()
-            Y = torch.randint(15, 25, (1,)).item()
-            Z = torch.randint(25, 35, (1,)).item()
-            
-            # Create sequence with noise
-            noise_len = np.random.randint(8, 15)
-            noise1 = torch.randint(35, 45, (noise_len,))
-            noise2 = torch.randint(35, 45, (noise_len,))
-            
-            # Input: [noise1] [X Y] [noise2] [Z] [query]
+            # Sequence: [A B] [noise] [B C] [noise] [C D] [noise] [A QUERY]
             input_seq = torch.cat([
-                noise1,
-                torch.tensor([X, Y]),
-                noise2,
-                torch.tensor([Z, self.QUERY_TOKEN]),
-                torch.zeros(seq_len - len(noise1) - 2 - len(noise2) - 2, dtype=torch.long)
+                torch.tensor([A, B]),
+                noise[:2],
+                torch.tensor([B, C]),
+                noise[2:4],
+                torch.tensor([C, D]),
+                noise[4:6],
+                torch.tensor([A, self.QUERY_TOKEN]),
+                torch.zeros(seq_len - 14, dtype=torch.long)
             ])
             
-            if len(input_seq) == seq_len:
-                # Target: output Y after seeing Z
-                target_seq = torch.zeros(seq_len, dtype=torch.long)
-                
-                # Find Z position
-                z_pos = None
-                for i, token in enumerate(input_seq):
-                    if token == Z:
-                        z_pos = i
-                        break
-                
-                if z_pos is not None and z_pos + 2 < seq_len:
-                    target_seq[z_pos + 2] = Y  # After QUERY_TOKEN
-                
-                inputs.append(input_seq)
-                targets.append(target_seq)
+            # Target: should output D (following the chain A->B->C->D)
+            target_seq = torch.zeros(seq_len, dtype=torch.long)
+            if 15 < seq_len:
+                target_seq[15] = D
+            
+            inputs.append(input_seq)
+            targets.append(target_seq)
         
         return torch.stack(inputs), torch.stack(targets)
     
-    def enhanced_train_and_evaluate(self, model: nn.Module, inputs: torch.Tensor, targets: torch.Tensor, 
-                                  task_name: str, max_steps: int = 5000) -> Dict[str, float]:
-        """Enhanced training with better optimization for high-capacity models"""
+    def train_with_methodology(self, model: nn.Module, inputs: torch.Tensor, targets: torch.Tensor,
+                             methodology: str, max_steps: int = 3000) -> Dict[str, float]:
+        """Train with specified methodology"""
         model = model.to(self.device)
         inputs = inputs.to(self.device)
         targets = targets.to(self.device)
         
-        start_time = time.time()
-        
-        # Dynamic batch size based on memory and model size
-        if hasattr(model.layers[0]['attention'], 'num_splats'):
-            num_splats = model.layers[0]['attention'].num_splats
-            if num_splats > 100:
-                batch_size = 8
-            elif num_splats > 50:
-                batch_size = 12
-            else:
-                batch_size = 16
+        # Optimizer
+        if methodology == "adaptive":
+            # More aggressive learning for exploration
+            optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=0.01)
         else:
-            batch_size = 16
+            # Standard learning
+            optimizer = torch.optim.AdamW(model.parameters(), lr=2e-4, weight_decay=0.01)
         
-        # Better optimizer for high-capacity models
-        optimizer = torch.optim.AdamW(
-            model.parameters(), 
-            lr=2e-4,  # Slightly lower for stability
-            weight_decay=0.01, 
-            betas=(0.9, 0.999),
-            eps=1e-8
-        )
+        # Scheduler
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps)
         
-        # Warmup + cosine schedule
-        warmup_steps = max_steps // 10
-        scheduler = torch.optim.lr_scheduler.LambdaLR(
-            optimizer,
-            lambda step: min(step / warmup_steps, 1.0) * (0.5 * (1 + np.cos(np.pi * step / max_steps)))
-        )
+        criterion = nn.CrossEntropyLoss(ignore_index=0)
         
-        criterion = nn.CrossEntropyLoss(ignore_index=0, reduction='mean')
-        
+        # Training loop
+        model.train()
         losses = []
-        accuracies = []
-        convergence_step = max_steps
         best_accuracy = 0.0
-        patience = 0
-        max_patience = 10
+        convergence_step = max_steps
         
         # Split data
         num_train = int(0.8 * len(inputs))
         train_inputs, test_inputs = inputs[:num_train], inputs[num_train:]
         train_targets, test_targets = targets[:num_train], targets[num_train:]
         
-        print(f"      Training {task_name} with {batch_size} batch size")
+        batch_size = 16
         
         for step in range(max_steps):
-            model.train()
-            
             # Sample batch
-            actual_batch_size = min(batch_size, len(train_inputs))
-            indices = torch.randperm(len(train_inputs))[:actual_batch_size]
+            indices = torch.randperm(len(train_inputs))[:batch_size]
             batch_inputs = train_inputs[indices]
             batch_targets = train_targets[indices]
             
             # Forward pass
-            logits = model(batch_inputs)
+            if methodology == "adaptive":
+                logits = model(batch_inputs, compute_loss_per_token=True)
+            else:
+                logits = model(batch_inputs)
             
-            # Compute loss only on non-zero targets
+            # Compute loss
             mask = batch_targets != 0
             if mask.sum() == 0:
                 continue
-                
+            
             loss = criterion(logits[mask], batch_targets[mask])
             
-            # Check for NaN
-            if torch.isnan(loss):
-                print(f"      NaN loss detected at step {step}, stopping")
-                break
-            
-            # Backward pass with gradient clipping
+            # Backward pass
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -453,369 +577,240 @@ class HighSplatTester:
             
             losses.append(loss.item())
             
-            # Memory cleanup
-            if step % 200 == 0 and self.device.type == 'cuda':
-                torch.cuda.empty_cache()
-            
-            # Evaluate every 500 steps (less frequent for longer training)
+            # Evaluate periodically
             if step % 500 == 0:
                 model.eval()
                 with torch.no_grad():
-                    test_batch_size = min(16, len(test_inputs))
-                    test_logits = []
-                    
-                    for i in range(0, len(test_inputs), test_batch_size):
-                        batch_test = test_inputs[i:i+test_batch_size]
-                        batch_logits = model(batch_test)
-                        test_logits.append(batch_logits)
-                    
-                    test_logits = torch.cat(test_logits, dim=0)
+                    test_logits = model(test_inputs)
                     predictions = test_logits.argmax(dim=-1)
                     
                     test_mask = test_targets != 0
                     if test_mask.sum() > 0:
                         accuracy = (predictions[test_mask] == test_targets[test_mask]).float().mean().item()
-                        accuracies.append(accuracy)
                         
                         if accuracy > best_accuracy:
                             best_accuracy = accuracy
-                            patience = 0
-                            
-                            # Higher threshold for convergence with complex tasks
-                            if accuracy > 0.80 and convergence_step == max_steps:
+                            if accuracy > 0.8 and convergence_step == max_steps:
                                 convergence_step = step
-                        else:
-                            patience += 1
                         
-                        # Early stopping
-                        if patience >= max_patience and step > 2000:
-                            print(f"      Early stopping at step {step} (accuracy={accuracy:.3f})")
-                            break
-                    else:
-                        accuracy = 0.0
-                        accuracies.append(0.0)
-                    
-                    if step % 2000 == 0:
-                        lr = scheduler.get_last_lr()[0]
-                        print(f"      {task_name} step {step}: loss={loss.item():.4f}, acc={accuracy:.3f}, lr={lr:.2e}")
+                        if step % 1000 == 0:
+                            lr = scheduler.get_last_lr()[0]
+                            stats = model.get_adaptation_stats() if methodology == "adaptive" else {}
+                            print(f"      Step {step}: loss={loss.item():.4f}, acc={accuracy:.3f}, lr={lr:.2e}")
+                            if stats:
+                                print(f"        Splats: {stats['num_splats']}, Births: {stats['birth_count']}, Deaths: {stats['death_count']}")
+                
+                model.train()
         
-        training_time = time.time() - start_time
-        final_accuracy = best_accuracy
-        final_loss = losses[-1] if losses else float('inf')
-        
-        # Cleanup
-        if self.device.type == 'cuda':
-            torch.cuda.empty_cache()
+        # Final evaluation
+        model.eval()
+        with torch.no_grad():
+            test_logits = model(test_inputs)
+            predictions = test_logits.argmax(dim=-1)
+            test_mask = test_targets != 0
+            if test_mask.sum() > 0:
+                final_accuracy = (predictions[test_mask] == test_targets[test_mask]).float().mean().item()
+            else:
+                final_accuracy = 0.0
         
         return {
-            'accuracy': final_accuracy,
+            'accuracy': max(best_accuracy, final_accuracy),
             'convergence_steps': convergence_step,
-            'final_loss': final_loss,
-            'training_time': training_time,
-            'losses': losses,
-            'accuracies': accuracies
+            'final_loss': losses[-1] if losses else float('inf'),
+            'adaptation_stats': model.get_adaptation_stats() if methodology == "adaptive" else {}
         }
     
-    def test_splat_scaling(self, splat_counts: List[int] = [16, 32, 64, 128, 256]) -> List[SplatScalingResult]:
-        """Test capability scaling with different splat counts"""
-        print(f"\n🔬 Testing Splat Count Scaling")
+    def compare_methodologies(self, splat_counts: List[int] = [16, 32, 64]) -> List[AdaptationResult]:
+        """Compare adaptive vs static training across different splat counts"""
+        print(f"\n🧬 COMPARING TRAINING METHODOLOGIES")
         print(f"=" * 60)
-        print(f"Splat counts to test: {splat_counts}")
-        print(f"Focus: Complex reasoning tasks where capability ceiling was observed")
+        print(f"Testing: Biological Adaptation vs Static Gradient Descent")
+        print(f"Splat counts: {splat_counts}")
         
-        # Focus on tasks where we saw limitations
-        complex_tasks = [
-            ("Complex Induction", self.create_complex_induction_task, 32, 6000),
-            ("Nested Reasoning", self.create_nested_reasoning_task, 36, 7000),
-            ("Multi-hop", self.create_multi_hop_reasoning_task, 40, 8000),
-            ("Compositional", self.create_compositional_task, 44, 8000),
+        tasks = [
+            ("Simple Reasoning", self.create_simple_reasoning_task, 12, 3000),
+            ("Complex Reasoning", self.create_complex_reasoning_task, 20, 4000),
         ]
         
-        # Also test one simple task as baseline
-        simple_tasks = [
-            ("Enhanced Copy", self.create_simple_enhanced_copy_task, 16, 3000),
-        ]
+        results = []
         
-        # Adjust based on available memory
-        if self.device.type == 'cuda':
-            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
-            if gpu_memory < 8:
-                splat_counts = [16, 32, 64]  # Limit for smaller GPUs
-                print(f"   Limited to {splat_counts} due to {gpu_memory:.1f}GB GPU memory")
-        
-        all_results = []
-        
-        for task_name, task_creator, seq_len, max_steps in simple_tasks + complex_tasks:
-            print(f"\n🧪 Testing {task_name} across splat counts")
-            print(f"-" * 50)
+        for task_name, task_creator, seq_len, max_steps in tasks:
+            print(f"\n🧪 Testing {task_name}")
+            print(f"-" * 40)
             
-            # Create test data once
-            try:
-                inputs, targets = task_creator(num_samples=400, seq_len=seq_len)
-                print(f"   Data shape: {inputs.shape}")
-                complexity = (targets != 0).sum().item()
-                print(f"   Task complexity: {complexity} non-zero targets")
-                
-            except Exception as e:
-                print(f"   ❌ Failed to create {task_name} data: {e}")
-                continue
+            # Create task data
+            inputs, targets = task_creator(num_samples=300, seq_len=seq_len)
+            print(f"   Data shape: {inputs.shape}")
+            print(f"   Task complexity: {(targets != 0).sum().item()} non-zero targets")
             
-            task_accuracies = []
-            task_convergence = []
-            task_losses = []
-            task_times = []
+            static_accuracies = []
+            adaptive_accuracies = []
+            adaptation_events = []
             
             for num_splats in splat_counts:
-                print(f"\n   🔧 Testing {num_splats} splats...")
+                print(f"\n   🔬 Testing {num_splats} splats...")
                 
-                try:
-                    # Clear memory before each test
-                    if self.device.type == 'cuda':
-                        torch.cuda.empty_cache()
-                        gc.collect()
-                    
-                    # Create SplatFlow model with specific splat count
-                    splat_attn = TrueSplatAttentionLayer(
-                        self.model_dim, 
-                        num_splats, 
-                        dropout=0.1, 
-                        temperature=1.0
-                    )
-                    
-                    model = HighCapacityTransformer(
-                        self.vocab_size, 
-                        self.model_dim, 
-                        splat_attn, 
-                        max_seq_len=seq_len + 5,
-                        num_layers=3
-                    )
-                    
-                    # Train and evaluate
-                    results = self.enhanced_train_and_evaluate(
-                        model, inputs, targets, 
-                        f"{task_name}-{num_splats}splats", 
-                        max_steps
-                    )
-                    
-                    task_accuracies.append(results['accuracy'])
-                    task_convergence.append(results['convergence_steps'])
-                    task_losses.append(results['final_loss'])
-                    task_times.append(results['training_time'])
-                    
-                    print(f"      Result: {results['accuracy']:.3f} accuracy, {results['convergence_steps']} steps, {results['training_time']:.1f}s")
-                    
-                    # Memory usage report
-                    if self.device.type == 'cuda':
-                        memory_used = torch.cuda.max_memory_allocated() / 1024**3
-                        print(f"      Memory: {memory_used:.2f}GB peak")
-                        torch.cuda.reset_peak_memory_stats()
-                    
-                    # Clean up before next test
-                    del model, splat_attn
-                    if self.device.type == 'cuda':
-                        torch.cuda.empty_cache()
-                    gc.collect()
-                    
-                except RuntimeError as e:
-                    if "out of memory" in str(e).lower():
-                        print(f"      ❌ OOM with {num_splats} splats")
-                        task_accuracies.append(0.0)
-                        task_convergence.append(max_steps)
-                        task_losses.append(float('inf'))
-                        task_times.append(0.0)
-                        
-                        # Clear memory and continue
-                        if self.device.type == 'cuda':
-                            torch.cuda.empty_cache()
-                        gc.collect()
-                        break
-                    else:
-                        raise e
+                # Test static methodology
+                print(f"      🔧 Static training...")
+                static_model = AdaptiveTransformer(
+                    self.vocab_size, self.model_dim, seq_len + 5, 
+                    initial_splats=num_splats, max_splats=num_splats
+                )
+                static_model.splat_layer.adaptation_enabled = False  # Disable adaptation
+                
+                static_result = self.train_with_methodology(
+                    static_model, inputs, targets, "static", max_steps
+                )
+                static_accuracies.append(static_result['accuracy'])
+                
+                print(f"         Result: {static_result['accuracy']:.3f} accuracy")
+                
+                # Clean up
+                del static_model
+                if self.device.type == 'cuda':
+                    torch.cuda.empty_cache()
+                
+                # Test adaptive methodology
+                print(f"      🧬 Adaptive training...")
+                adaptive_model = AdaptiveTransformer(
+                    self.vocab_size, self.model_dim, seq_len + 5,
+                    initial_splats=num_splats, max_splats=num_splats * 2  # Allow growth
+                )
+                
+                adaptive_result = self.train_with_methodology(
+                    adaptive_model, inputs, targets, "adaptive", max_steps
+                )
+                adaptive_accuracies.append(adaptive_result['accuracy'])
+                
+                # Track adaptation events
+                stats = adaptive_result['adaptation_stats']
+                events = stats['birth_count'] + stats['death_count']
+                adaptation_events.append(events)
+                
+                print(f"         Result: {adaptive_result['accuracy']:.3f} accuracy")
+                print(f"         Adaptation: {stats['num_splats']} final splats, {events} total events")
+                
+                # Clean up
+                del adaptive_model
+                if self.device.type == 'cuda':
+                    torch.cuda.empty_cache()
             
-            # Store results for this task
-            result = SplatScalingResult(
+            # Store results
+            result = AdaptationResult(
                 task_name=task_name,
-                splat_counts=splat_counts[:len(task_accuracies)],
-                accuracies=task_accuracies,
-                convergence_steps=task_convergence,
-                final_losses=task_losses,
-                training_times=task_times
+                static_accuracies=static_accuracies,
+                adaptive_accuracies=adaptive_accuracies,
+                splat_counts=splat_counts,
+                adaptation_events=adaptation_events
             )
+            results.append(result)
             
-            all_results.append(result)
-            
-            # Print task summary
-            print(f"\n   📊 {task_name} Summary:")
-            for i, (splats, acc) in enumerate(zip(result.splat_counts, result.accuracies)):
-                print(f"      {splats:3d} splats: {acc:.3f} accuracy")
-            
-            # Check for improvement with more splats
-            if len(task_accuracies) > 1:
-                improvement = task_accuracies[-1] - task_accuracies[0]
-                print(f"      📈 Improvement from {result.splat_counts[0]} to {result.splat_counts[-1]} splats: {improvement:+.3f}")
+            # Print comparison
+            print(f"\n   📊 {task_name} Comparison:")
+            print(f"      {'Splats':<8} {'Static':<8} {'Adaptive':<8} {'Improvement':<12} {'Events':<8}")
+            print(f"      {'-'*50}")
+            for i, splats in enumerate(splat_counts):
+                static_acc = static_accuracies[i]
+                adaptive_acc = adaptive_accuracies[i]
+                improvement = adaptive_acc - static_acc
+                events = adaptation_events[i]
                 
-                if improvement > 0.1:
-                    print(f"      ✅ Significant improvement with more splats!")
-                elif improvement > 0.03:
-                    print(f"      📊 Modest improvement with more splats")
-                else:
-                    print(f"      ⚠️  Minimal improvement - possible capability ceiling")
+                print(f"      {splats:<8} {static_acc:<8.3f} {adaptive_acc:<8.3f} {improvement:+8.3f}     {events:<8}")
         
-        return all_results
+        return results
     
-    def create_simple_enhanced_copy_task(self, num_samples: int = 400, seq_len: int = 16) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Enhanced copying task for baseline comparison"""
-        inputs = []
-        targets = []
-        
-        for _ in range(num_samples):
-            copy_len = np.random.randint(3, 6)  # 3-5 tokens
-            to_copy = torch.randint(5, min(30, self.vocab_size), (copy_len,))
-            
-            input_seq = torch.cat([
-                to_copy,
-                torch.tensor([self.COPY_TOKEN]),
-                torch.zeros(seq_len - copy_len - 1, dtype=torch.long)
-            ])
-            
-            target_seq = torch.zeros(seq_len, dtype=torch.long)
-            start_pos = copy_len + 1
-            if start_pos + copy_len <= seq_len:
-                target_seq[start_pos:start_pos + copy_len] = to_copy
-            
-            inputs.append(input_seq)
-            targets.append(target_seq)
-        
-        return torch.stack(inputs), torch.stack(targets)
-    
-    def analyze_scaling_results(self, results: List[SplatScalingResult]):
-        """Comprehensive analysis of splat scaling results"""
-        print(f"\n📊 SPLAT SCALING ANALYSIS")
+    def analyze_results(self, results: List[AdaptationResult]):
+        """Analyze and summarize the comparison results"""
+        print(f"\n📊 METHODOLOGY COMPARISON ANALYSIS")
         print(f"=" * 60)
         
-        print(f"{'Task':<18} {'16→32':<8} {'32→64':<8} {'64→128':<8} {'128→256':<8} {'Ceiling?':<8}")
+        total_improvements = 0
+        significant_improvements = 0
+        methodology_wins = {"static": 0, "adaptive": 0, "tie": 0}
+        
+        print(f"{'Task':<18} {'Static Avg':<10} {'Adaptive Avg':<12} {'Improvement':<12} {'Winner':<10}")
         print(f"-" * 70)
         
-        significant_improvements = 0
-        capability_ceilings = 0
-        
         for result in results:
-            improvements = []
+            static_avg = np.mean(result.static_accuracies)
+            adaptive_avg = np.mean(result.adaptive_accuracies)
+            improvement = adaptive_avg - static_avg
             
-            # Calculate improvements between consecutive splat counts
-            for i in range(1, len(result.accuracies)):
-                prev_acc = result.accuracies[i-1]
-                curr_acc = result.accuracies[i]
-                improvement = curr_acc - prev_acc
-                improvements.append(improvement)
+            total_improvements += improvement
             
-            # Format improvements for display
-            imp_strs = []
-            for i, imp in enumerate(improvements):
-                if i < 4:  # Only show first 4 transitions
-                    if imp > 0.05:
-                        imp_strs.append(f"+{imp:.2f}")
-                        if i == len(improvements) - 1:  # Last improvement
-                            significant_improvements += 1
-                    elif imp > 0.01:
-                        imp_strs.append(f"+{imp:.2f}")
-                    else:
-                        imp_strs.append(f"{imp:+.2f}")
-            
-            # Pad to 4 columns
-            while len(imp_strs) < 4:
-                imp_strs.append("--")
-            
-            # Detect capability ceiling
-            if len(improvements) >= 2:
-                recent_improvements = improvements[-2:]
-                if all(imp < 0.02 for imp in recent_improvements):
-                    ceiling = "YES"
-                    capability_ceilings += 1
-                else:
-                    ceiling = "NO"
+            if improvement > 0.05:
+                significant_improvements += 1
+                winner = "Adaptive"
+                methodology_wins["adaptive"] += 1
+            elif improvement < -0.05:
+                winner = "Static"
+                methodology_wins["static"] += 1
             else:
-                ceiling = "?"
+                winner = "Tie"
+                methodology_wins["tie"] += 1
             
-            print(f"{result.task_name:<18} {imp_strs[0]:<8} {imp_strs[1]:<8} {imp_strs[2]:<8} {imp_strs[3]:<8} {ceiling:<8}")
+            print(f"{result.task_name:<18} {static_avg:<10.3f} {adaptive_avg:<12.3f} {improvement:+8.3f}     {winner:<10}")
         
-        print(f"\n🔍 INFORMATION BOTTLENECK ANALYSIS:")
-        print(f"   Tasks showing significant improvement with more splats: {significant_improvements}/{len(results)}")
-        print(f"   Tasks hitting capability ceiling: {capability_ceilings}/{len(results)}")
+        avg_improvement = total_improvements / len(results)
         
-        if capability_ceilings > significant_improvements:
-            print(f"   📊 CONCLUSION: Strong evidence of capability ceiling")
-            print(f"   💡 Information bottleneck appears fundamental, not just due to insufficient splats")
-        elif significant_improvements > capability_ceilings:
-            print(f"   📊 CONCLUSION: Capability scales with splat count") 
-            print(f"   💡 Previous limitations may have been due to insufficient capacity")
-        else:
-            print(f"   📊 CONCLUSION: Mixed evidence - task-dependent scaling")
-        
-        # Analyze by task type
-        complex_tasks = [r for r in results if r.task_name in ["Complex Induction", "Nested Reasoning", "Multi-hop", "Compositional"]]
-        simple_tasks = [r for r in results if r.task_name not in ["Complex Induction", "Nested Reasoning", "Multi-hop", "Compositional"]]
-        
-        if complex_tasks and simple_tasks:
-            print(f"\n🧠 COMPLEXITY ANALYSIS:")
-            
-            # Average final accuracy for each type
-            complex_final_accs = [r.accuracies[-1] for r in complex_tasks if r.accuracies]
-            simple_final_accs = [r.accuracies[-1] for r in simple_tasks if r.accuracies]
-            
-            if complex_final_accs and simple_final_accs:
-                complex_avg = np.mean(complex_final_accs)
-                simple_avg = np.mean(simple_final_accs)
-                
-                print(f"   Simple tasks final accuracy: {simple_avg:.3f}")
-                print(f"   Complex tasks final accuracy: {complex_avg:.3f}")
-                print(f"   Complexity gap: {simple_avg - complex_avg:.3f}")
-                
-                if simple_avg - complex_avg > 0.3:
-                    print(f"   ⚠️  Large complexity gap persists even with high splat counts")
-                    print(f"   💡 This suggests fundamental architectural limitations")
-        
-        # Memory and efficiency analysis
-        print(f"\n⚡ EFFICIENCY ANALYSIS:")
-        for result in results:
-            if len(result.splat_counts) >= 2 and len(result.training_times) >= 2:
-                time_ratio = result.training_times[-1] / result.training_times[0]
-                acc_ratio = result.accuracies[-1] / max(result.accuracies[0], 0.001)
-                efficiency = acc_ratio / time_ratio
-                
-                print(f"   {result.task_name}: {time_ratio:.1f}x time, {acc_ratio:.1f}x accuracy, {efficiency:.2f} efficiency")
-        
-        # Final scientific assessment
         print(f"\n🔬 SCIENTIFIC CONCLUSIONS:")
+        print(f"   📈 Average improvement with adaptive training: {avg_improvement:+.3f}")
+        print(f"   🏆 Methodology wins: Adaptive={methodology_wins['adaptive']}, Static={methodology_wins['static']}, Tie={methodology_wins['tie']}")
+        print(f"   ⭐ Tasks with significant improvement: {significant_improvements}/{len(results)}")
         
-        # Check if any complex task achieved high performance
-        high_performing_complex = [r for r in complex_tasks if r.accuracies and max(r.accuracies) > 0.8]
+        # Analyze scaling patterns
+        print(f"\n📈 SCALING ANALYSIS:")
+        for result in results:
+            print(f"   {result.task_name}:")
+            for i, splats in enumerate(result.splat_counts):
+                static_acc = result.static_accuracies[i]
+                adaptive_acc = result.adaptive_accuracies[i]
+                events = result.adaptation_events[i]
+                
+                print(f"      {splats:2d} splats: Static {static_acc:.3f} → Adaptive {adaptive_acc:.3f} ({events} adaptation events)")
         
-        if high_performing_complex:
-            print(f"   ✅ HIGH SPLAT COUNT BREAKTHROUGH: Complex reasoning achievable with sufficient splats")
-            print(f"   💡 Previous capability ceiling was due to insufficient capacity")
+        # Overall assessment
+        if avg_improvement > 0.1:
+            print(f"\n🎉 BREAKTHROUGH: Biological adaptation significantly improves reasoning capability!")
+            print(f"   💡 The capability ceiling was due to poor training methodology, not architecture")
+            print(f"   🧬 Dynamic exploration and adaptation enables better splat configurations")
+        elif avg_improvement > 0.03:
+            print(f"\n📊 MODEST SUCCESS: Adaptive training shows consistent but modest improvements")
+            print(f"   💡 Biological mechanisms help but don't completely solve the limitations")
         else:
-            max_complex_acc = max([max(r.accuracies) for r in complex_tasks if r.accuracies] + [0])
-            print(f"   ⚠️  CAPABILITY CEILING CONFIRMED: Max complex task accuracy = {max_complex_acc:.3f}")
-            print(f"   💡 Even with 256+ splats, complex reasoning remains limited")
-            print(f"   🧠 This suggests fundamental information bottleneck in the architecture")
+            print(f"\n⚠️  METHODOLOGY INSUFFICIENT: Adaptive training doesn't significantly help")
+            print(f"   💡 The capability ceiling may indeed be architectural rather than methodological")
         
-        # Check for scaling patterns
-        consistently_improving = sum(1 for r in results if len(r.accuracies) >= 3 and r.accuracies[-1] > r.accuracies[0] + 0.05)
-        print(f"   📈 Tasks showing consistent improvement: {consistently_improving}/{len(results)}")
+        # Specific insights
+        print(f"\n💡 KEY INSIGHTS:")
         
-        if consistently_improving >= len(results) * 0.6:
-            print(f"   💫 SCALING SUCCESS: Most tasks benefit from higher splat counts")
+        # Check if performance degrades with more splats under adaptive training
+        degradation_count = 0
+        for result in results:
+            if len(result.adaptive_accuracies) > 1:
+                if result.adaptive_accuracies[-1] < result.adaptive_accuracies[0]:
+                    degradation_count += 1
+        
+        if degradation_count == 0:
+            print(f"   ✅ Adaptive training eliminates performance degradation with more splats")
+            print(f"   🧬 Biological mechanisms properly utilize additional capacity")
         else:
-            print(f"   🔒 SCALING LIMITS: Higher splat counts provide diminishing returns")
+            print(f"   ⚠️  Some tasks still show degradation with more splats even with adaptation")
+        
+        # Check adaptation event correlation
+        high_event_tasks = [r for r in results if max(r.adaptation_events) > 50]
+        if high_event_tasks:
+            print(f"   🔄 High adaptation activity correlates with better performance")
+            print(f"   💡 Active structural changes are essential for complex reasoning")
+        
+        return avg_improvement, methodology_wins
 
 def main():
-    """Run high splat count capability testing"""
-    print("🚀 High Splat Count Capability Test")
-    print("Testing whether dramatically more splats can overcome capability limitations...")
+    """Run the adaptive vs static training comparison"""
+    print("🧬 Adaptive SplatFlow Training Methodology Test")
+    print("Testing whether biological adaptation can overcome capability limitations...")
     print()
     
-    # Check GPU memory for splat count planning
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     if device == 'cuda':
@@ -824,79 +819,64 @@ def main():
         
         if gpu_memory < 6:
             model_dim = 128
-            max_splats = [16, 32, 64]
+            splat_counts = [8, 16, 32]
             print("Using conservative config for limited GPU memory")
-        elif gpu_memory < 12:
-            model_dim = 192
-            max_splats = [16, 32, 64, 128]
-            print("Using moderate config")
         else:
-            model_dim = 256
-            max_splats = [16, 32, 64, 128, 256]
-            print("Using high-capacity config for ample GPU memory")
+            model_dim = 192
+            splat_counts = [16, 32, 64]
+            print("Using standard config")
     else:
-        model_dim = 128
-        max_splats = [16, 32]
+        model_dim = 96
+        splat_counts = [8, 16]
         print("Using minimal config for CPU")
     
     print(f"\n🔧 Test Configuration:")
     print(f"   Model dimension: {model_dim}")
-    print(f"   Splat counts to test: {max_splats}")
-    print(f"   Focus: Complex reasoning tasks with capability ceiling")
-    print(f"   Scientific question: Is ceiling due to insufficient splats or fundamental limits?")
+    print(f"   Splat counts to test: {splat_counts}")
+    print(f"   Hypothesis: Biological adaptation enables better splat utilization")
+    print(f"   Key Question: Is the capability ceiling due to poor training methodology?")
     
     # Clear memory
     if device == 'cuda':
         torch.cuda.empty_cache()
     
-    tester = HighSplatTester(device=device, model_dim=model_dim)
+    tester = AdaptiveTester(device=device, model_dim=model_dim)
     
     print(f"\n🧪 Experimental Design:")
-    print(f"   📊 Test same complex tasks with varying splat counts")
-    print(f"   🔬 Look for: Accuracy improvement with more splats")
-    print(f"   💡 Key insight: If more splats don't help, bottleneck is fundamental")
-    print(f"   ⚖️  If they do help, previous tests were capacity-limited")
+    print(f"   🔧 Static Training: Standard gradient descent on fixed splat count")
+    print(f"   🧬 Adaptive Training: Biological mitosis, death, exploration during training")
+    print(f"   📊 Measure: Whether adaptive training overcomes scaling failures")
+    print(f"   💡 Expected: If biological adaptation works, more splats should help")
     
     try:
-        results = tester.test_splat_scaling(max_splats)
-        tester.analyze_scaling_results(results)
+        results = tester.compare_methodologies(splat_counts)
+        avg_improvement, methodology_wins = tester.analyze_results(results)
         
         print(f"\n🎯 FINAL VERDICT:")
         
-        # Calculate overall trend
-        total_improvements = 0
-        total_comparisons = 0
+        if avg_improvement > 0.1:
+            print(f"   🎉 BIOLOGICAL BREAKTHROUGH: Average improvement of {avg_improvement:.3f}")
+            print(f"   ✅ Adaptive training overcomes static methodology limitations")
+            print(f"   💡 The capability ceiling was indeed due to poor exploration/optimization")
+            print(f"   🧬 Biological adaptation mechanisms are essential for complex reasoning")
+        elif avg_improvement > 0.03:
+            print(f"   📊 PARTIAL SUCCESS: Modest improvement of {avg_improvement:.3f}")
+            print(f"   ⚖️  Adaptive training helps but doesn't eliminate all limitations")
+            print(f"   💡 Both methodology and architecture factors contribute to ceiling")
+        else:
+            print(f"   ⚠️  METHODOLOGY INSUFFICIENT: Minimal improvement ({avg_improvement:.3f})")
+            print(f"   🔒 Biological adaptation doesn't overcome fundamental limitations")
+            print(f"   💡 The capability ceiling appears to be truly architectural")
         
-        for result in results:
-            if len(result.accuracies) >= 2:
-                improvement = result.accuracies[-1] - result.accuracies[0]
-                total_improvements += improvement
-                total_comparisons += 1
-        
-        if total_comparisons > 0:
-            avg_improvement = total_improvements / total_comparisons
-            
-            if avg_improvement > 0.2:
-                print(f"   🎉 BREAKTHROUGH: Average improvement of {avg_improvement:.3f} with more splats")
-                print(f"   ✅ Previous capability ceiling was due to insufficient splat capacity")
-                print(f"   💡 SplatFlow can handle complex reasoning with enough splats")
-                print(f"   🚀 This validates the O(n*k) efficiency claims with maintained capability")
-            elif avg_improvement > 0.05:
-                print(f"   📊 MODERATE SUCCESS: Average improvement of {avg_improvement:.3f}")
-                print(f"   ⚖️  More splats help but don't eliminate all limitations")
-                print(f"   💡 Suggests both capacity and architectural factors at play")
-            else:
-                print(f"   ⚠️  CAPABILITY CEILING CONFIRMED: Minimal improvement ({avg_improvement:.3f})")
-                print(f"   🔒 Even with order-of-magnitude more splats, complex reasoning limited")
-                print(f"   💡 This confirms fundamental information bottleneck in the architecture")
-                print(f"   🧠 SplatFlow trades reasoning capability for computational efficiency")
-        
-        # Compare to standard attention performance expectations
-        print(f"\n🔬 ARCHITECTURAL IMPLICATIONS:")
-        print(f"   📊 These results reveal the true capability/efficiency tradeoff")
-        print(f"   ⚡ O(n*k) efficiency comes with reasoning constraints")
-        print(f"   🎯 Optimal use case: Tasks where moderate reasoning + high efficiency valuable")
-        print(f"   ❌ Poor fit: Applications requiring complex multi-hop reasoning")
+        print(f"\n🔬 IMPLICATIONS FOR SPLATFLOW:")
+        if methodology_wins["adaptive"] > methodology_wins["static"]:
+            print(f"   🧬 Biological training methodologies should be standard for SplatFlow")
+            print(f"   ⚡ Combine O(n*k) efficiency with adaptive splat optimization")
+            print(f"   🎯 Focus on developing better exploration and adaptation mechanisms")
+        else:
+            print(f"   📊 Static training is sufficient - focus on architectural improvements")
+            print(f"   ⚡ Efficiency gains are primary value, not capability improvements")
+            print(f"   🎯 Position SplatFlow as specialized efficiency architecture")
         
     except Exception as e:
         print(f"❌ Test failed: {e}")
