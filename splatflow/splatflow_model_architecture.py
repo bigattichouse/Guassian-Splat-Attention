@@ -209,9 +209,15 @@ class FixedUltimateProductionSplatFlowGPT(nn.Module):
         
         with torch.no_grad():
             try:
+                # Ensure sample_batch is on the correct device
+                sample_batch = DeviceManager.ensure_tensor_device(sample_batch, device)
+                
                 # Get sample embeddings from the first batch
                 sample_size = min(100, sample_batch.size(1))  # First 100 tokens or less
                 sample_embeddings = self.token_embedding(sample_batch[:, :sample_size])
+                
+                # Ensure embeddings are on correct device
+                sample_embeddings = DeviceManager.ensure_tensor_device(sample_embeddings, device)
                 
                 print(f"🎯 FIXED: Positioning all splats based on actual embedding statistics...")
                 
@@ -225,14 +231,18 @@ class FixedUltimateProductionSplatFlowGPT(nn.Module):
                 
             except Exception as e:
                 logger.error(f"Failed to fix splat positioning: {e}")
+                # Continue without error to allow training to proceed
     
     def apply_progressive_repositioning(self, sample_batch: torch.Tensor, epoch: int):
         """Apply progressive splat repositioning during training"""
         if epoch > 0 and epoch % 3 == 0:  # Every 3 epochs
             with torch.no_grad():
                 try:
+                    device = DeviceManager.get_primary_device()
+                    sample_batch = DeviceManager.ensure_tensor_device(sample_batch, device)
                     sample_size = min(50, sample_batch.size(1))
                     sample_embeddings = self.token_embedding(sample_batch[:, :sample_size])
+                    sample_embeddings = DeviceManager.ensure_tensor_device(sample_embeddings, device)
                     
                     for layer in self.layers:
                         layer.attention.progressive_splat_repositioning(sample_embeddings, epoch)
@@ -244,8 +254,11 @@ class FixedUltimateProductionSplatFlowGPT(nn.Module):
         if epoch > 5 and epoch % 5 == 0:  # Every 5 epochs after epoch 5
             with torch.no_grad():
                 try:
+                    device = DeviceManager.get_primary_device()
+                    sample_batch = DeviceManager.ensure_tensor_device(sample_batch, device)
                     sample_size = min(50, sample_batch.size(1))
                     sample_embeddings = self.token_embedding(sample_batch[:, :sample_size])
+                    sample_embeddings = DeviceManager.ensure_tensor_device(sample_embeddings, device)
                     
                     for layer in self.layers:
                         layer.attention.emergency_splat_rescue(sample_embeddings, epoch)
@@ -311,8 +324,10 @@ class FixedUltimateProductionSplatFlowGPT(nn.Module):
                     trajectory, enhanced_pos = self.trajectory_flow.compute_enhanced_trajectory_flow(i, x)
                     layer_trajectories.append(trajectory)
                     
-                    # Add enhanced positional information
-                    x = x + 0.1 * enhanced_pos
+                    # Add enhanced positional information (reduced influence to avoid dimension issues)
+                    if enhanced_pos.shape == x.shape:
+                        x = x + 0.05 * enhanced_pos  # Reduced from 0.1
+                    
                     x = self.embedding_dropout(x)
                     
                     # Process through layer

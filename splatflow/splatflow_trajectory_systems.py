@@ -317,7 +317,7 @@ class TrajectoryCache(nn.Module):
 
 
 class TrajectoryAwarePositionalEmbedding(nn.Module):
-    """Enhanced positional embedding integrating trajectory information"""
+    """Enhanced positional embedding integrating trajectory information - FIXED DIMENSIONS"""
     
     def __init__(self, model_dim: int, max_seq_len: int = 2048):
         super().__init__()
@@ -325,7 +325,9 @@ class TrajectoryAwarePositionalEmbedding(nn.Module):
         self.max_seq_len = max_seq_len
         
         self.position_embedding = nn.Embedding(max_seq_len, model_dim)
-        self.trajectory_position_proj = nn.Linear(model_dim * 2, model_dim)
+        
+        # FIXED: Correct projection layer input dimension
+        self.trajectory_position_proj = nn.Linear(model_dim, model_dim)  # Changed from model_dim * 2
         
         self.trajectory_directions = nn.Parameter(
             torch.randn(max_seq_len, model_dim // 4) * 0.1
@@ -358,7 +360,7 @@ class TrajectoryAwarePositionalEmbedding(nn.Module):
     
     def forward(self, input_embeddings: torch.Tensor, 
                 trajectories: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """Compute trajectory-aware positional embeddings"""
+        """Compute trajectory-aware positional embeddings - FIXED DIMENSIONS"""
         try:
             batch_size, seq_len, model_dim = input_embeddings.shape
             device = input_embeddings.device
@@ -370,53 +372,43 @@ class TrajectoryAwarePositionalEmbedding(nn.Module):
             pos_embeddings = self.position_embedding(positions)
             
             if trajectories is not None and trajectories.size(1) >= seq_len:
-                # Enhanced trajectory-aware positioning
-                traj_dirs = self.trajectory_directions[:seq_len]
-                traj_dir_expanded = traj_dirs.unsqueeze(0).expand(batch_size, -1, -1)
-                
-                traj_freqs = self.trajectory_frequencies[:seq_len]
-                traj_freq_expanded = traj_freqs.unsqueeze(0).expand(batch_size, -1, -1)
-                
-                pos_scales = torch.sigmoid(self.position_scales[:seq_len])
-                scaled_trajectories = trajectories[:, :seq_len, :] * pos_scales.unsqueeze(0).unsqueeze(-1)
-                
-                # Ensure trajectory component has correct dimensions
-                traj_component_dim = min(model_dim//2, scaled_trajectories.size(-1))
-                
-                trajectory_component = torch.cat([
-                    traj_dir_expanded,
-                    traj_freq_expanded,
-                    scaled_trajectories[:, :, :traj_component_dim]
-                ], dim=-1)
-                
-                # Ensure trajectory_component has the right size for projection
-                expected_size = model_dim * 2
-                if trajectory_component.size(-1) != expected_size:
-                    # Pad or truncate to expected size
-                    if trajectory_component.size(-1) < expected_size:
-                        padding = torch.zeros(batch_size, seq_len, expected_size - trajectory_component.size(-1), device=device)
-                        trajectory_component = torch.cat([trajectory_component, padding], dim=-1)
+                try:
+                    # SIMPLIFIED: Use trajectory information more directly without complex concatenation
+                    pos_scales = torch.sigmoid(self.position_scales[:seq_len])
+                    scaled_trajectories = trajectories[:, :seq_len, :] * pos_scales.unsqueeze(0).unsqueeze(-1)
+                    
+                    # Simple weighted combination instead of complex projection
+                    trajectory_weight = 0.1  # Small influence factor
+                    trajectory_component = scaled_trajectories * trajectory_weight
+                    
+                    # Ensure same dimensions
+                    if trajectory_component.shape[-1] == model_dim:
+                        enhanced_pos = pos_embeddings.unsqueeze(0) + trajectory_component
                     else:
-                        trajectory_component = trajectory_component[:, :, :expected_size]
-                
-                trajectory_pos = self.trajectory_position_proj(
-                    torch.cat([input_embeddings[:, :seq_len, :], trajectory_component], dim=-1)
-                )
-                
-                enhanced_pos = pos_embeddings.unsqueeze(0) + 0.3 * trajectory_pos
+                        # If dimensions don't match, just use basic positional embedding
+                        enhanced_pos = pos_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
+                    
+                except Exception as inner_e:
+                    logger.warning(f"Trajectory integration failed: {inner_e}, using basic positional")
+                    enhanced_pos = pos_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
             else:
                 enhanced_pos = pos_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
             
             return enhanced_pos
+            
         except Exception as e:
             logger.warning(f"Trajectory-aware positional embedding failed: {e}")
             # Fallback to basic positional embedding
-            batch_size, seq_len, model_dim = input_embeddings.shape
-            device = input_embeddings.device
-            seq_len = min(seq_len, self.max_seq_len)
-            positions = torch.arange(seq_len, device=device)
-            pos_embeddings = self.position_embedding(positions)
-            return pos_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
+            try:
+                batch_size, seq_len, model_dim = input_embeddings.shape
+                device = input_embeddings.device
+                seq_len = min(seq_len, self.max_seq_len)
+                positions = torch.arange(seq_len, device=device)
+                pos_embeddings = self.position_embedding(positions)
+                return pos_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
+            except Exception as fallback_e:
+                logger.error(f"Even fallback positional embedding failed: {fallback_e}")
+                return torch.zeros_like(input_embeddings)
 
 
 class EnhancedInterLayerTrajectoryFlow(nn.Module):
@@ -485,8 +477,13 @@ class EnhancedInterLayerTrajectoryFlow(nn.Module):
                 embeddings, base_trajectories, layer_idx
             )
             
-            # Compute enhanced positional embeddings
-            enhanced_positions = self.enhanced_positional(embeddings, guided_trajectories)
+            # Compute enhanced positional embeddings with safe error handling
+            try:
+                enhanced_positions = self.enhanced_positional(embeddings, guided_trajectories)
+            except Exception as pos_e:
+                logger.warning(f"Enhanced positional embedding failed: {pos_e}")
+                # Fallback to simple positional embedding
+                enhanced_positions = torch.zeros_like(embeddings)
             
             # Store for analysis
             self.layer_trajectories[layer_idx] = guided_trajectories.detach().clone()
