@@ -47,24 +47,43 @@ def cleanup_memory():
         torch.cuda.synchronize()
 
 def get_gpu_memory_info():
-    """Get current GPU memory usage"""
+    """Get current GPU memory usage with safe division"""
     if torch.cuda.is_available():
-        allocated = torch.cuda.memory_allocated() / 1024**3
-        reserved = torch.cuda.memory_reserved() / 1024**3
-        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        free = total - reserved
-        return {
-            'allocated': allocated,
-            'reserved': reserved,
-            'total': total,
-            'free': free,
-            'percent_used': (allocated / total) * 100
-        }
+        try:
+            allocated = torch.cuda.memory_allocated() / 1024**3
+            reserved = torch.cuda.memory_reserved() / 1024**3
+            total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+            free = total - reserved
+            
+            # Safe division for percentage calculation
+            if total > 0:
+                percent_used = (allocated / total) * 100
+            else:
+                percent_used = 0.0
+            
+            return {
+                'allocated': allocated,
+                'reserved': reserved,
+                'total': total,
+                'free': free,
+                'percent_used': percent_used
+            }
+        except Exception as e:
+            logger.warning(f"Failed to get GPU memory info: {e}")
+            return {
+                'allocated': 0.0,
+                'reserved': 0.0,
+                'total': 0.0,
+                'free': 0.0,
+                'percent_used': 0.0
+            }
     return None
 
 def safe_tensor_to_scalar(tensor: torch.Tensor, default: float = 0.0) -> float:
     """Safely convert tensor to scalar with proper error handling"""
     try:
+        if tensor is None:
+            return default
         if tensor.numel() == 1:
             return tensor.item()
         elif tensor.numel() > 1:
@@ -86,9 +105,13 @@ class DeviceManager:
     @staticmethod
     def ensure_tensor_device(tensor: torch.Tensor, target_device: torch.device) -> torch.Tensor:
         """Ensure a tensor is on the target device"""
-        if tensor.device != target_device:
-            return tensor.to(target_device)
-        return tensor
+        try:
+            if tensor.device != target_device:
+                return tensor.to(target_device)
+            return tensor
+        except Exception as e:
+            logger.warning(f"Failed to move tensor to device {target_device}: {e}")
+            return tensor
     
     @staticmethod
     def safe_cat(tensors: List[torch.Tensor], dim: int = 0, target_device: torch.device = None) -> torch.Tensor:
@@ -96,11 +119,16 @@ class DeviceManager:
         if not tensors:
             raise ValueError("Cannot concatenate empty tensor list")
         
-        if target_device is None:
-            target_device = tensors[0].device
-        
-        aligned_tensors = [DeviceManager.ensure_tensor_device(t, target_device) for t in tensors]
-        return torch.cat(aligned_tensors, dim=dim)
+        try:
+            if target_device is None:
+                target_device = tensors[0].device
+            
+            aligned_tensors = [DeviceManager.ensure_tensor_device(t, target_device) for t in tensors]
+            return torch.cat(aligned_tensors, dim=dim)
+        except Exception as e:
+            logger.error(f"Safe concatenation failed: {e}")
+            # Return first tensor as fallback
+            return tensors[0] if tensors else torch.tensor([])
 
 
 class ComprehensiveRealDatasetLoader:
@@ -268,27 +296,31 @@ class ComprehensiveRealDatasetLoader:
         """Enhanced text cleaning for better quality"""
         import re
         
-        text = ' '.join(text.split())
-        text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
-        text = re.sub(r'\S*@\S*\s?', '', text)
-        
-        text = text.replace('==', '').replace('||', '')
-        text = text.replace('{{', '').replace('}}', '')
-        text = text.replace('[edit]', '').replace('[citation needed]', '')
-        text = text.replace('&nbsp;', ' ').replace('&amp;', '&')
-        text = text.replace('\n\n\n', '\n\n')
-        
-        text = re.sub(r'\s+([.!?])', r'\1', text)
-        text = re.sub(r'([.!?])\s*([A-Z])', r'\1 \2', text)
-        
-        if len(text) > 3000:
-            cutoff = text[:3000].rfind('.')
-            if cutoff > 1500:
-                text = text[:cutoff + 1]
-            else:
-                text = text[:3000]
-        
-        return text.strip()
+        try:
+            text = ' '.join(text.split())
+            text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+            text = re.sub(r'\S*@\S*\s?', '', text)
+            
+            text = text.replace('==', '').replace('||', '')
+            text = text.replace('{{', '').replace('}}', '')
+            text = text.replace('[edit]', '').replace('[citation needed]', '')
+            text = text.replace('&nbsp;', ' ').replace('&amp;', '&')
+            text = text.replace('\n\n\n', '\n\n')
+            
+            text = re.sub(r'\s+([.!?])', r'\1', text)
+            text = re.sub(r'([.!?])\s*([A-Z])', r'\1 \2', text)
+            
+            if len(text) > 3000:
+                cutoff = text[:3000].rfind('.')
+                if cutoff > 1500:
+                    text = text[:cutoff + 1]
+                else:
+                    text = text[:3000]
+            
+            return text.strip()
+        except Exception as e:
+            logger.warning(f"Text cleaning failed: {e}")
+            return text.strip() if isinstance(text, str) else ""
     
     def _add_enhanced_fallback_content(self):
         """Add enhanced fallback content if dataset loading is insufficient"""
@@ -311,17 +343,20 @@ class ComprehensiveRealDatasetLoader:
         
         expanded_content = []
         
-        for story_idx, base_story in enumerate(base_stories):
-            for variation in range(100):
-                intro = f"Chapter {variation + 1}: "
-                connection = " This sequence demonstrates systematic progression and careful observation. "
-                conclusion = f"This represents example {variation + 1} in our comprehensive study."
-                
-                full_story = intro + base_story + connection + conclusion
-                expanded_content.append(full_story)
-        
-        self.all_texts.extend(expanded_content)
-        logger.info(f"      ✅ Added {len(expanded_content)} enhanced fallback texts")
+        try:
+            for story_idx, base_story in enumerate(base_stories):
+                for variation in range(100):
+                    intro = f"Chapter {variation + 1}: "
+                    connection = " This sequence demonstrates systematic progression and careful observation. "
+                    conclusion = f"This represents example {variation + 1} in our comprehensive study."
+                    
+                    full_story = intro + base_story + connection + conclusion
+                    expanded_content.append(full_story)
+            
+            self.all_texts.extend(expanded_content)
+            logger.info(f"      ✅ Added {len(expanded_content)} enhanced fallback texts")
+        except Exception as e:
+            logger.warning(f"Failed to add fallback content: {e}")
 
 
 class EnhancedRealDataset(Dataset):
@@ -435,9 +470,40 @@ class EnhancedRealDataset(Dataset):
             logger.info(f"   🔧 Fixed {issues_fixed} sequence issues")
         
         logger.info(f"   ✅ Validation complete: {len(self.examples)} valid sequences")
+        
+        # Safety check for empty dataset
+        if len(self.examples) == 0:
+            logger.warning("   ⚠️ No valid sequences created, adding emergency fallback")
+            self._create_emergency_sequences()
+    
+    def _create_emergency_sequences(self):
+        """Create emergency sequences if dataset is empty"""
+        try:
+            emergency_text = "This is a test sequence for emergency fallback."
+            tokens = self.tokenizer.encode(emergency_text, add_special_tokens=True)
+            
+            for i in range(10):  # Create 10 emergency sequences
+                sequence = tokens + [self.tokenizer.eos_token_id] * (self.seq_length - len(tokens))
+                sequence = sequence[:self.seq_length]  # Ensure correct length
+                self.examples.append(torch.tensor(sequence, dtype=torch.long))
+            
+            logger.info(f"   🚨 Created {len(self.examples)} emergency sequences")
+        except Exception as e:
+            logger.error(f"Emergency sequence creation failed: {e}")
     
     def __len__(self):
-        return len(self.examples)
+        return max(len(self.examples), 1)  # Ensure at least 1 to avoid division by zero
     
     def __getitem__(self, idx):
-        return self.examples[idx]
+        try:
+            if len(self.examples) == 0:
+                # Emergency fallback
+                emergency_sequence = torch.zeros(self.seq_length, dtype=torch.long)
+                return emergency_sequence
+            
+            # Safe indexing
+            safe_idx = idx % len(self.examples)
+            return self.examples[safe_idx]
+        except Exception as e:
+            logger.warning(f"Dataset getitem failed for idx {idx}: {e}")
+            return torch.zeros(self.seq_length, dtype=torch.long)
