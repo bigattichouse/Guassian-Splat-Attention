@@ -227,11 +227,10 @@ class SplatFlowTrainingOrchestrator:
                     continue
                 
                 loss = F.cross_entropy(
-                    logits.view(-1, logits.size(-1)),
-                    targets.view(-1),
+                    logits.reshape(-1, logits.size(-1)),
+                    targets.reshape(-1),
                     ignore_index=self.tokenizer.pad_token_id
                 )
-                
                 # Check for invalid loss
                 if torch.isnan(loss) or torch.isinf(loss):
                     logger.warning(f"Invalid loss in batch {batch_idx}: {loss.item()}, skipping")
