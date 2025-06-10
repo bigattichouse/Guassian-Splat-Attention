@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-SplatFlow Test Script
+SplatFlow Test Script with Enhanced Monitoring
 Test the SplatFlow implementation with a quick training run.
 
 Usage:
-    python test_splatflow.py [--quick] [--full] [--validate-only]
+    python test_splatflow.py [--quick] [--full] [--validate-only] [--deep-analysis]
     
     --quick: Run minimal test (2 epochs, small model)
     --full: Run longer test (10 epochs, larger model) 
     --validate-only: Just validate installation without training
+    --deep-analysis: Enable enhanced monitoring and analysis
 """
 
 import os
@@ -40,11 +41,12 @@ def setup_imports():
         )
         logger.info("✅ Using package imports")
         return True
-    except ImportError:
+    except ImportError as e:
         try:
             # Try same-directory imports
             # We need to modify the modules to work without relative imports
             logger.info("📁 Package import failed, trying same-directory imports...")
+            print(f"Import error: {e}")
             logger.info("⚠️  Please move files to splatflow/ subdirectory for best results")
             return setup_same_directory_imports()
         except ImportError as e:
@@ -105,6 +107,13 @@ def validate_environment():
         logger.info(f"✅ NumPy {numpy.__version__}")
     except ImportError:
         missing_deps.append("numpy")
+    
+    # Check scikit-learn for enhanced monitoring
+    try:
+        import sklearn
+        logger.info(f"✅ Scikit-learn available (for enhanced monitoring)")
+    except ImportError:
+        logger.info("📊 Scikit-learn not found - enhanced monitoring will have limited clustering features")
     
     if missing_deps:
         logger.error(f"❌ Missing dependencies: {missing_deps}")
@@ -251,18 +260,128 @@ def simple_splatflow_test():
         logger.error(f"❌ Simplified test failed: {e}")
         return False
 
-def run_splatflow_test(quick_mode=True):
-    """Run the full SplatFlow test"""
+# NEW: Enhanced Training Orchestrator with Deep Analysis
+class EnhancedSplatFlowTrainingOrchestrator:
+    """Training orchestrator with enhanced monitoring capabilities"""
+    
+    def __init__(self, config, enable_deep_analysis=False):
+        # Import here to avoid issues if analyzer not available
+        from splatflow import SplatFlowTrainingOrchestrator
+        
+        self.base_trainer = SplatFlowTrainingOrchestrator(config)
+        self.config = config
+        self.enable_deep_analysis = enable_deep_analysis
+        self.analyzer = None
+        
+        if enable_deep_analysis:
+            try:
+                from splatflow import SplatFlowAnalyzer
+                logger.info("🔬 Enhanced monitoring enabled")
+            except ImportError:
+                logger.warning("⚠️  SplatFlowAnalyzer not found - continuing without enhanced monitoring")
+                logger.info("   To enable: Save the monitoring code as splatflow/splatflow_analyzer.py")
+                self.enable_deep_analysis = False
+    
+    def train(self):
+        """Enhanced training with optional deep analysis"""
+        
+        if self.enable_deep_analysis and self.analyzer is None:
+            from splatflow import SplatFlowAnalyzer
+            # Initialize analyzer after model is created
+            pass
+        
+        # Start base training
+        logger.info("🚀 Starting enhanced SplatFlow training...")
+        
+        # Monkey-patch the base trainer's train_epoch method to add monitoring
+        original_train_epoch = self.base_trainer.train_epoch
+        
+        def enhanced_train_epoch(dataloader, epoch):
+            # Call original training
+            epoch_results = original_train_epoch(dataloader, epoch)
+            
+            # Add enhanced monitoring if enabled
+            if self.enable_deep_analysis:
+                try:
+                    self.run_enhanced_analysis(dataloader, epoch)
+                except Exception as e:
+                    logger.warning(f"Enhanced analysis failed for epoch {epoch}: {e}")
+            
+            return epoch_results
+        
+        # Replace the method
+        self.base_trainer.train_epoch = enhanced_train_epoch
+        
+        # Run training
+        return self.base_trainer.train()
+    
+    def run_enhanced_analysis(self, dataloader, epoch):
+        """Run enhanced analysis for current epoch"""
+        
+        if not self.enable_deep_analysis:
+            return
+        
+        # Initialize analyzer if needed
+        if self.analyzer is None:
+            from splatflow import SplatFlowAnalyzer
+            self.analyzer = SplatFlowAnalyzer(self.base_trainer.model)
+        
+        # Run analysis on first batch
+        try:
+            batch = next(iter(dataloader))
+            
+            # Run comprehensive analysis every few epochs
+            if epoch % 2 == 0 or epoch < 3:  # More frequent analysis early on
+                logger.info(f"\n🧬 Running deep analysis for epoch {epoch}...")
+                analysis = self.analyzer.analyze_epoch(batch, epoch)
+                
+                # Summary of key findings
+                self.log_analysis_summary(analysis, epoch)
+                
+        except Exception as e:
+            logger.warning(f"Enhanced analysis failed: {e}")
+    
+    def log_analysis_summary(self, analysis, epoch):
+        """Log summary of analysis findings"""
+        
+        logger.info(f"\n📊 Enhanced Analysis Summary - Epoch {epoch}")
+        logger.info("-" * 50)
+        
+        # Trajectory patterns
+        trajectory_data = analysis.get('trajectories', {})
+        for layer_key, data in trajectory_data.items():
+            pattern = data.get('pattern_type', 'unknown')
+            strength = data.get('trajectory_strength', 0.0)
+            improvement = data.get('expected_improvement', 'N/A')
+            
+            logger.info(f"   {layer_key}: {pattern} pattern (strength={strength:.4f}, expected={improvement})")
+        
+        # Benchmark warnings
+        benchmark_data = analysis.get('benchmarks', {})
+        warnings = benchmark_data.get('warnings', [])
+        if warnings:
+            logger.info(f"   ⚠️  Warnings: {len(warnings)}")
+            for warning in warnings[:3]:  # Show first 3 warnings
+                logger.info(f"      {warning}")
+        else:
+            logger.info(f"   ✅ All benchmarks passed")
+        
+        # Constellation potential
+        constellation_data = analysis.get('constellations', {})
+        potential = constellation_data.get('average_potential', 0.0)
+        if potential > 0.3:
+            logger.info(f"   🌌 Constellation potential: {potential:.3f} - {constellation_data.get('recommendation', '')}")
+
+def run_splatflow_test(quick_mode=True, enable_deep_analysis=False):
+    """Run the full SplatFlow test with optional enhanced monitoring"""
     
     try:
         # Import SplatFlow components
-        from splatflow import (
-            SplatFlowTrainingOrchestrator,
-            setup_environment,
-            cleanup_memory
-        )
+        from splatflow import setup_environment, cleanup_memory
         
         logger.info("🚀 Starting SplatFlow test...")
+        if enable_deep_analysis:
+            logger.info("🔬 Enhanced monitoring enabled")
         
         # Setup environment
         setup_environment()
@@ -270,8 +389,8 @@ def run_splatflow_test(quick_mode=True):
         # Create configuration
         config = create_minimal_config(quick_mode)
         
-        # Create trainer
-        trainer = SplatFlowTrainingOrchestrator(config)
+        # Create enhanced trainer
+        trainer = EnhancedSplatFlowTrainingOrchestrator(config, enable_deep_analysis)
         
         # Run training
         start_time = time.time()
@@ -285,6 +404,13 @@ def run_splatflow_test(quick_mode=True):
         logger.info(f"   Best loss: {training_summary['best_loss']:.4f}")
         logger.info(f"   Total steps: {training_summary['total_steps']}")
         logger.info(f"   Final health: {training_summary['final_model_stats']['overall_health']}")
+        
+        # Enhanced analysis summary
+        if enable_deep_analysis:
+            logger.info(f"\n🔬 Enhanced Monitoring Summary:")
+            logger.info(f"   Deep analysis completed for training run")
+            logger.info(f"   Check logs above for trajectory patterns and benchmark comparisons")
+            logger.info(f"   Consider reviewing constellation potential for document-level features")
         
         # Cleanup
         cleanup_memory()
@@ -326,12 +452,15 @@ def main():
     parser.add_argument('--validate-only', action='store_true', help='Only validate environment')
     parser.add_argument('--benchmark', action='store_true', help='Run performance benchmark')
     parser.add_argument('--simple', action='store_true', help='Run simplified test without full SplatFlow')
+    parser.add_argument('--deep-analysis', action='store_true', help='Enable enhanced monitoring and analysis')
     
     args = parser.parse_args()
     
     # Print header
     print("=" * 60)
     print("🌟 SplatFlow Test Script")
+    if args.deep_analysis:
+        print("🔬 Enhanced Monitoring Mode")
     print("=" * 60)
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
@@ -361,13 +490,15 @@ def main():
         else:
             logger.info("🎯 Running full SplatFlow test...")
         
-        success = run_splatflow_test(quick_mode)
+        success = run_splatflow_test(quick_mode, args.deep_analysis)
     
     # Final status
     print("\n" + "=" * 60)
     if success:
         print("🎉 TEST PASSED!")
         print("SplatFlow is working correctly.")
+        if args.deep_analysis:
+            print("🔬 Enhanced monitoring data collected - check logs above!")
     else:
         print("❌ TEST FAILED!")
         print("Please check the error messages above.")

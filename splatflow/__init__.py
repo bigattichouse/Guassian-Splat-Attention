@@ -6,7 +6,8 @@ Usage:
     from splatflow import SplatFlowTrainingOrchestrator, create_production_splatflow_model
     
     # Quick training
-    config = {'epochs': 10, 'batch_size': 2}
+    config = create_default_config()
+    config.update({'epochs': 10, 'batch_size': 2})
     trainer = SplatFlowTrainingOrchestrator(config)
     results = trainer.train()
     
@@ -54,8 +55,16 @@ from .splatflow_model_architecture import (
 from .splatflow_training_orchestrator import (
     SplatFlowTrainingOrchestrator,
     create_default_config,
-    main
+    quick_start_example
 )
+
+# Analyzer (optional)
+try:
+    from .splatflow_analyzer import SplatFlowAnalyzer
+    ANALYZER_AVAILABLE = True
+except ImportError:
+    ANALYZER_AVAILABLE = False
+    SplatFlowAnalyzer = None
 
 # Package metadata
 __version__ = "1.0.0"
@@ -66,8 +75,9 @@ __description__ = "Production-ready SplatFlow attention mechanism with O(n*k) co
 __all__ = [
     # High-level interfaces
     'SplatFlowTrainingOrchestrator',
-    'create_production_splatflow_model',
+    'create_production_splatflow_model', 
     'create_default_config',
+    'quick_start_example',
     
     # Core model components
     'FixedUltimateProductionSplatFlowGPT',
@@ -95,46 +105,9 @@ __all__ = [
     'get_gpu_memory_info',
     'get_quick_model_stats',
     
-    # Main execution
-    'main'
+    # Optional components
+    'SplatFlowAnalyzer',  # Will be None if not available
 ]
-
-def quick_start_example():
-    """
-    Quick start example showing basic SplatFlow usage.
-    
-    Returns:
-        SplatFlowTrainingOrchestrator: Configured trainer ready for training
-    """
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    
-    # Setup environment
-    setup_environment()
-    
-    # Create a lightweight configuration for quick testing
-    quick_config = {
-        'model_dim': 128,        # Smaller for quick testing
-        'num_layers': 2,         # Fewer layers
-        'num_splats': 8,         # Fewer splats
-        'epochs': 5,             # Quick training
-        'batch_size': 1,         # Small batch
-        'seq_length': 512,       # Shorter sequences
-        'target_sequences': 100, # Fewer training sequences
-        'steps_per_epoch': 10,   # Quick epochs
-        'eval_interval': 2,      # Frequent evaluation
-        'save_interval': 5,      # Save at end
-        'checkpoint_dir': 'splatflow_quickstart'
-    }
-    
-    # Create trainer
-    trainer = SplatFlowTrainingOrchestrator(quick_config)
-    
-    print("🚀 SplatFlow Quick Start Example Ready!")
-    print("   Run: trainer.train() to start training")
-    print(f"   Config: {quick_config}")
-    
-    return trainer
 
 def create_inference_model(checkpoint_path: str):
     """
@@ -292,6 +265,7 @@ MAIN COMPONENTS:
     from splatflow import SplatFlowTrainingOrchestrator, create_default_config
     
     config = create_default_config()
+    config.update({'epochs': 10, 'batch_size': 2})
     trainer = SplatFlowTrainingOrchestrator(config)
     results = trainer.train()
 
@@ -343,7 +317,8 @@ def get_version_info():
         'cuda_available': torch.cuda.is_available(),
         'cuda_version': torch.version.cuda if torch.cuda.is_available() else None,
         'device_count': torch.cuda.device_count() if torch.cuda.is_available() else 0,
-        'device_name': torch.cuda.get_device_name() if torch.cuda.is_available() else None
+        'device_name': torch.cuda.get_device_name() if torch.cuda.is_available() else None,
+        'analyzer_available': ANALYZER_AVAILABLE
     }
     
     return info
@@ -353,6 +328,7 @@ def _print_package_info():
     """Print package information when imported."""
     print(f"🌟 SplatFlow v{__version__} - Production-Ready O(n*k) Attention")
     print(f"   {__description__}")
+    print(f"   Enhanced monitoring: {'✅ Available' if ANALYZER_AVAILABLE else '⚠️  Limited'}")
     print(f"   Run splatflow.help() for usage information")
     print(f"   Run splatflow.quick_start_example() for quick demo")
 
