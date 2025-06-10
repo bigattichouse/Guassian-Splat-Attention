@@ -1,0 +1,10 @@
+{
+  "epoch": 25,
+  "crisis_level": "MILD",
+  "overall_health_score": 0.3172057655903975,
+  "total_splats": 66,
+  "trajectory_influence": 0.0,
+  "communication_effectiveness": 1.3333333333333333,
+  "dormant_layers": [],
+  "healthy_layers": []
+}
