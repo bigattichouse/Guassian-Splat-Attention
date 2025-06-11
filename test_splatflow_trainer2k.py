@@ -94,7 +94,7 @@ def get_enhanced_hardware_configs():
             "memory_limit_gb": 3.5,
             "config": {
                 "model_dim": 256,
-                "num_layers": 2,
+                "num_layers": 3,
                 "num_splats": 6,
                 "max_splats": 128,
                 "batch_size": 1,
@@ -107,7 +107,7 @@ def get_enhanced_hardware_configs():
                 "max_seq_len": 1024,  # FIXED: Match seq_length
                 
                 # INTELLIGENT birth control settings
-                "max_births_per_epoch": 1,
+                "max_births_per_epoch": 8,
                 "birth_cooldown": 8,
                 "coverage_threshold": 0.05,   # Slightly higher threshold
                 "min_cluster_size": 10,       # Reasonable minimum
@@ -147,10 +147,10 @@ def get_enhanced_hardware_configs():
             "description": "FIXED: Progressive scaling from 2K to 4K tokens",
             "memory_limit_gb": 4.9,
             "config": {
-                "model_dim": 320,
+                "model_dim": 400, #320,
                 "num_layers": 3,
                 "num_splats": 12,
-                "max_splats": 24,
+                "max_splats": 128,
                 "batch_size": 1,
                 "gradient_accumulation_steps": 4,
                 "mixed_precision": True,
@@ -189,9 +189,9 @@ def get_enhanced_hardware_configs():
             "memory_limit_gb": 4.9,
             "config": {
                 "model_dim": 256,        # Reduced for 4K context
-                "num_layers": 2,         # Fewer layers for memory
-                "num_splats": 8,         # Fewer splats
-                "max_splats": 16,        # Controlled growth
+                "num_layers": 3,         # Fewer layers for memory
+                "num_splats": 32,         # Fewer splats
+                "max_splats": 256,        # Controlled growth
                 "batch_size": 1,
                 "gradient_accumulation_steps": 8,
                 "mixed_precision": True,
@@ -207,8 +207,8 @@ def get_enhanced_hardware_configs():
                 "optimize_splat_sampling": True,
                 
                 # Controlled birth system for memory efficiency
-                "max_births_per_epoch": 1,
-                "birth_cooldown": 8,
+                "max_births_per_epoch": 8,
+                "birth_cooldown": 1,
                 "coverage_threshold": 0.03,
                 "min_cluster_size": 15,
                 "max_cluster_size": 250,      # Allow moderate clusters for 4K
@@ -480,7 +480,7 @@ class FixedMemorySafeSplatFlowTrainer:
             'max_seq_len': max_seq_len,  # FIXED: Proper alignment
             
             # Enhanced training settings
-            'epochs': 30,
+            'epochs': 250,
             'learning_rate': 2e-4,
             'weight_decay': 0.01,
             'warmup_epochs': 2,
