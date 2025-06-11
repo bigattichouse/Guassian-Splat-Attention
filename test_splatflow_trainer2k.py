@@ -188,9 +188,9 @@ def get_enhanced_hardware_configs():
             "description": "FIXED: Direct 4096 tokens with proper alignment",
             "memory_limit_gb": 4.9,
             "config": {
-                "model_dim": 256,        # Reduced for 4K context
+                "model_dim": 400,        # Reduced for 4K context
                 "num_layers": 3,         # Fewer layers for memory
-                "num_splats": 32,         # Fewer splats
+                "num_splats": 12,         # Fewer splats
                 "max_splats": 256,        # Controlled growth
                 "batch_size": 1,
                 "gradient_accumulation_steps": 8,
@@ -207,8 +207,8 @@ def get_enhanced_hardware_configs():
                 "optimize_splat_sampling": True,
                 
                 # Controlled birth system for memory efficiency
-                "max_births_per_epoch": 8,
-                "birth_cooldown": 1,
+                "max_births_per_epoch": 2,
+                "birth_cooldown": 2,
                 "coverage_threshold": 0.03,
                 "min_cluster_size": 15,
                 "max_cluster_size": 250,      # Allow moderate clusters for 4K
