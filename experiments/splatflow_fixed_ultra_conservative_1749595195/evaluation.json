@@ -1,0 +1,26 @@
+{
+  "generation_0": {
+    "prompt": "Once upon a time",
+    "generated": "Once upon a time was He a and and One. was, \" The a a that. and, they,. him and to in't's. day.. very but.!\". of.'t, and, with \" He the it her he of \""
+  },
+  "generation_1": {
+    "prompt": "The scientist discovered",
+    "generated": "The scientist discovered advocates tease Marse commitODventus Pattyrenheit convol libelatchewanmanuel Story R\u00e9 NGOs Nationwide outper demonsester gradualorientsystem ()); Sharks innumerable rationaleRAW Patty rehabilit Ashes pics Compuilt erratic investigatedorientRAW Ez succeeded innumerable Story EscapeRAWTHRequirements rehabilit Ahead Acting CompRAW"
+  },
+  "generation_2": {
+    "prompt": "In the future",
+    "generated": "In the futureflake blacklist convol Jub Dietary serv ());orient Sections adversaries volcanoamins gradingmanuel Ahead AmenJournal unarmed206 Nationwideverning Escape 386 putting convolventusorient Ashesujah Marse succeededsuccess Story Respond outperRequirements 386 pics demonsowment206orient Story NationwideujahRAW Storyujah terminalssystem"
+  },
+  "model_health": {
+    "total_splats": 14,
+    "healthy_splats": 14,
+    "health_pct": 100.0,
+    "avg_traj_influence": 0.8279920127508896,
+    "avg_coverage_efficiency": 0.0,
+    "total_births": 4,
+    "pending_birth_requests": 9532,
+    "flow_magnitude": 2.6888322830200195,
+    "cache_hit_rate": 69.14026095060578,
+    "active_layers": 2
+  }
+}

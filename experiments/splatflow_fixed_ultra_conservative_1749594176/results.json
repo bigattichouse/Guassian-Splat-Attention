@@ -1,0 +1,435 @@
+{
+  "experiment_name": "splatflow_fixed_ultra_conservative_1749594176",
+  "hardware_tier": "ultra_conservative",
+  "dataset_config": "conservative",
+  "training_summary": {
+    "config": {
+      "model_dim": 256,
+      "num_layers": 3,
+      "num_splats": 6,
+      "max_splats": 10,
+      "max_seq_len": 2048,
+      "dropout": 0.1,
+      "epochs": 100,
+      "batch_size": 1,
+      "seq_length": 1024,
+      "target_sequences": 500,
+      "learning_rate": 0.0003,
+      "weight_decay": 0.01,
+      "use_progressive_training": true,
+      "warmup_epochs": 3,
+      "eval_interval": 5,
+      "eval_max_length": 50,
+      "eval_temperature": 0.8,
+      "eval_top_k": 50,
+      "log_interval": 5,
+      "save_interval": 10,
+      "checkpoint_dir": "experiments/splatflow_fixed_ultra_conservative_1749594176/checkpoints",
+      "dataset_name": "enhanced_real",
+      "steps_per_epoch": 25,
+      "gradient_accumulation_steps": 8,
+      "mixed_precision": true,
+      "gradient_checkpointing": true,
+      "disable_adaptive_birth": true,
+      "max_births_per_epoch": 0,
+      "birth_cooldown": 999,
+      "dataset_config": "conservative",
+      "enable_detailed_monitoring": false
+    },
+    "total_epochs": 35,
+    "total_steps": 900,
+    "best_loss": 5.9753310585021975,
+    "final_model_stats": {
+      "epoch": 34,
+      "total_splats": 24,
+      "total_healthy_splats": 24,
+      "health_percentage": 100.0,
+      "overall_health": "\ud83d\udfe2 HEALTHY",
+      "layer_stats": [
+        {
+          "layer_idx": 0,
+          "num_splats": 8,
+          "healthy_splats": 8,
+          "avg_usefulness": 5.0,
+          "avg_trajectory_influence": 0.10822852772660554,
+          "trajectory_strength": 0.6456562876701355,
+          "coverage_efficiency": 0.0,
+          "birth_stats": {
+            "total_births": 2,
+            "total_deaths": 0,
+            "births_this_epoch": 2,
+            "pending_requests": 757,
+            "cooldown_remaining": 0,
+            "birth_reasons": {
+              "coverage_gap": 1,
+              "radius_limit_reached": 1
+            },
+            "max_splats": 10,
+            "max_radius": 10.0,
+            "coverage_stats": {
+              "gaps_detected": 1,
+              "clusters_found": 1,
+              "coverage_threshold": 0.1,
+              "min_cluster_size": 3
+            }
+          },
+          "health_status": "\ud83d\udfe2 HEALTHY"
+        },
+        {
+          "layer_idx": 1,
+          "num_splats": 8,
+          "healthy_splats": 8,
+          "avg_usefulness": 5.0,
+          "avg_trajectory_influence": 1.263389121592045,
+          "trajectory_strength": 0.7109494805335999,
+          "coverage_efficiency": 0.0,
+          "birth_stats": {
+            "total_births": 2,
+            "total_deaths": 0,
+            "births_this_epoch": 2,
+            "pending_requests": 7167,
+            "cooldown_remaining": 0,
+            "birth_reasons": {
+              "trajectory_bottleneck": 1,
+              "radius_limit_reached": 1
+            },
+            "max_splats": 10,
+            "max_radius": 10.0,
+            "coverage_stats": {
+              "gaps_detected": 0,
+              "clusters_found": 0,
+              "coverage_threshold": 0.1,
+              "min_cluster_size": 3
+            }
+          },
+          "health_status": "\ud83d\udfe2 HEALTHY"
+        },
+        {
+          "layer_idx": 2,
+          "num_splats": 8,
+          "healthy_splats": 8,
+          "avg_usefulness": 5.0,
+          "avg_trajectory_influence": 3.857726868391037,
+          "trajectory_strength": 0.7685248255729675,
+          "coverage_efficiency": 0.0,
+          "birth_stats": {
+            "total_births": 2,
+            "total_deaths": 0,
+            "births_this_epoch": 2,
+            "pending_requests": 7167,
+            "cooldown_remaining": 0,
+            "birth_reasons": {
+              "trajectory_bottleneck": 1,
+              "radius_limit_reached": 1
+            },
+            "max_splats": 10,
+            "max_radius": 10.0,
+            "coverage_stats": {
+              "gaps_detected": 0,
+              "clusters_found": 0,
+              "coverage_threshold": 0.1,
+              "min_cluster_size": 3
+            }
+          },
+          "health_status": "\ud83d\udfe2 HEALTHY"
+        }
+      ],
+      "trajectory_stats": {
+        "layer_flow_magnitudes": {
+          "0": 0.10734523832798004,
+          "1": 0.6668464541435242,
+          "2": 2.538313388824463
+        },
+        "total_layers_with_flow": 3,
+        "max_flow_magnitude": 2.538313388824463,
+        "avg_flow_magnitude": 1.104168360431989,
+        "guidance": {
+          "guidance_strengths_by_layer": [
+            0.6203759908676147,
+            0.6662444472312927,
+            0.7067750096321106
+          ],
+          "avg_guidance_strength": 0.6644651492436727,
+          "max_guidance_strength": 0.7067750096321106,
+          "guidance_active_layers": 3
+        },
+        "cache": {
+          "cache_size": 25,
+          "cache_hits": 9099,
+          "cache_misses": 3500,
+          "hit_rate": 0.7222001746170331,
+          "total_requests": 12599
+        }
+      },
+      "model_info": {
+        "num_layers": 3,
+        "model_dim": 256,
+        "num_splats_per_layer": 6,
+        "max_seq_len": 2048
+      }
+    },
+    "training_stats": [
+      {
+        "epoch": 0,
+        "loss": 9.674889602661132,
+        "lr": 0.00029993338564937436,
+        "time": 24.355592489242554,
+        "steps": 25
+      },
+      {
+        "epoch": 1,
+        "loss": 7.539660453796387,
+        "lr": 0.0002997336083378179,
+        "time": 3.6732001304626465,
+        "steps": 25
+      },
+      {
+        "epoch": 2,
+        "loss": 6.556984901428223,
+        "lr": 0.00029940086522141753,
+        "time": 4.84721040725708,
+        "steps": 25
+      },
+      {
+        "epoch": 3,
+        "loss": 6.405511512756347,
+        "lr": 0.00029893548467745676,
+        "time": 4.2941060066223145,
+        "steps": 25
+      },
+      {
+        "epoch": 4,
+        "loss": 6.474685230255127,
+        "lr": 0.0002983379259803463,
+        "time": 3.839139699935913,
+        "steps": 25
+      },
+      {
+        "epoch": 5,
+        "loss": 6.349557933807373,
+        "lr": 0.0002976087788483764,
+        "time": 4.911105155944824,
+        "steps": 25
+      },
+      {
+        "epoch": 6,
+        "loss": 6.257403812408447,
+        "lr": 0.00029674876286173515,
+        "time": 4.287668704986572,
+        "steps": 25
+      },
+      {
+        "epoch": 7,
+        "loss": 6.370809574127197,
+        "lr": 0.0002957587267523702,
+        "time": 3.842420816421509,
+        "steps": 25
+      },
+      {
+        "epoch": 8,
+        "loss": 6.246654605865478,
+        "lr": 0.00029463964756639273,
+        "time": 2.822981595993042,
+        "steps": 25
+      },
+      {
+        "epoch": 9,
+        "loss": 6.230889892578125,
+        "lr": 0.0002933926296998518,
+        "time": 3.884957790374756,
+        "steps": 25
+      },
+      {
+        "epoch": 10,
+        "loss": 6.194179191589355,
+        "lr": 0.00029201890380882716,
+        "time": 3.8491363525390625,
+        "steps": 25
+      },
+      {
+        "epoch": 11,
+        "loss": 6.138660068511963,
+        "lr": 0.00029051982559492125,
+        "time": 2.834592342376709,
+        "steps": 25
+      },
+      {
+        "epoch": 12,
+        "loss": 6.104762268066406,
+        "lr": 0.0002888968744673452,
+        "time": 3.8793628215789795,
+        "steps": 25
+      },
+      {
+        "epoch": 13,
+        "loss": 6.196539058685302,
+        "lr": 0.0002871516520829209,
+        "time": 2.8368637561798096,
+        "steps": 25
+      },
+      {
+        "epoch": 14,
+        "loss": 6.106334247589111,
+        "lr": 0.0002852858807654386,
+        "time": 3.8455240726470947,
+        "steps": 25
+      },
+      {
+        "epoch": 15,
+        "loss": 6.091095352172852,
+        "lr": 0.00028330140180593067,
+        "time": 2.8946428298950195,
+        "steps": 25
+      },
+      {
+        "epoch": 16,
+        "loss": 6.087784271240235,
+        "lr": 0.00028120017364554196,
+        "time": 3.849337100982666,
+        "steps": 25
+      },
+      {
+        "epoch": 17,
+        "loss": 6.091264743804931,
+        "lr": 0.00027898426994278234,
+        "time": 2.8490850925445557,
+        "steps": 25
+      },
+      {
+        "epoch": 18,
+        "loss": 6.139928741455078,
+        "lr": 0.0002766558775270765,
+        "time": 2.864743709564209,
+        "steps": 25
+      },
+      {
+        "epoch": 19,
+        "loss": 6.191579933166504,
+        "lr": 0.00027421729424062914,
+        "time": 2.8462181091308594,
+        "steps": 25
+      },
+      {
+        "epoch": 20,
+        "loss": 6.218968696594239,
+        "lr": 0.0002716709266707293,
+        "time": 5.298772096633911,
+        "steps": 25
+      },
+      {
+        "epoch": 21,
+        "loss": 6.022044086456299,
+        "lr": 0.0002690192877747425,
+        "time": 2.8818070888519287,
+        "steps": 25
+      },
+      {
+        "epoch": 22,
+        "loss": 6.098202838897705,
+        "lr": 0.00026626499440012284,
+        "time": 3.8563039302825928,
+        "steps": 25
+      },
+      {
+        "epoch": 23,
+        "loss": 5.9753310585021975,
+        "lr": 0.00026341076470190114,
+        "time": 2.844623327255249,
+        "steps": 25
+      },
+      {
+        "epoch": 24,
+        "loss": 6.161188659667968,
+        "lr": 0.00026045941546019445,
+        "time": 2.881326675415039,
+        "steps": 25
+      },
+      {
+        "epoch": 25,
+        "loss": 6.1317458152771,
+        "lr": 0.0002574138593003833,
+        "time": 2.869783878326416,
+        "steps": 25
+      },
+      {
+        "epoch": 26,
+        "loss": 6.10947847366333,
+        "lr": 0.0002542771018187033,
+        "time": 2.8451414108276367,
+        "steps": 25
+      },
+      {
+        "epoch": 27,
+        "loss": 6.027100830078125,
+        "lr": 0.00025105223861608315,
+        "time": 2.8815665245056152,
+        "steps": 25
+      },
+      {
+        "epoch": 28,
+        "loss": 6.112063541412353,
+        "lr": 0.00024774245224316177,
+        "time": 2.8438093662261963,
+        "steps": 25
+      },
+      {
+        "epoch": 29,
+        "loss": 6.094479084014893,
+        "lr": 0.0002443510090594937,
+        "time": 2.8578977584838867,
+        "steps": 25
+      },
+      {
+        "epoch": 30,
+        "loss": 6.111959781646728,
+        "lr": 0.00024088125601004734,
+        "time": 2.885612964630127,
+        "steps": 25
+      },
+      {
+        "epoch": 31,
+        "loss": 6.169941673278808,
+        "lr": 0.00023733661732217406,
+        "time": 2.8599255084991455,
+        "steps": 25
+      },
+      {
+        "epoch": 32,
+        "loss": 5.987572059631348,
+        "lr": 0.00023372059112630947,
+        "time": 2.8457489013671875,
+        "steps": 25
+      },
+      {
+        "epoch": 33,
+        "loss": 6.053428363800049,
+        "lr": 0.0002300367460037407,
+        "time": 2.8811328411102295,
+        "steps": 25
+      },
+      {
+        "epoch": 34,
+        "loss": 6.106957664489746,
+        "lr": 0.0002262887174648479,
+        "time": 2.8455209732055664,
+        "steps": 25
+      },
+      {
+        "epoch": 35,
+        "loss": 6.052334728240967,
+        "lr": 0.00022248020436129367,
+        "time": 2.846707344055176,
+        "steps": 25
+      }
+    ],
+    "device": "cuda"
+  },
+  "completed_at": "2025-06-10T17:26:28.954282",
+  "context_length": 1024,
+  "fixes_applied": [
+    "Memory-safe configurations",
+    "Conservative splat birth control",
+    "Gradient accumulation for small batches",
+    "Progressive layer training"
+  ]
+}

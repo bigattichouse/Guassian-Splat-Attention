@@ -1,0 +1,173 @@
+{
+  "experiment_name": "splatflow_fixed_ultra_conservative_1749596484",
+  "hardware_tier": "ultra_conservative",
+  "dataset_config": "conservative",
+  "training_summary": {
+    "config": {
+      "model_dim": 256,
+      "num_layers": 2,
+      "num_splats": 5,
+      "max_splats": 128,
+      "max_seq_len": 2048,
+      "dropout": 0.1,
+      "epochs": 500,
+      "batch_size": 3,
+      "seq_length": 1024,
+      "target_sequences": 256,
+      "learning_rate": 0.0003,
+      "weight_decay": 0.01,
+      "use_progressive_training": true,
+      "warmup_epochs": 3,
+      "eval_interval": 5,
+      "eval_max_length": 50,
+      "eval_temperature": 0.8,
+      "eval_top_k": 50,
+      "log_interval": 5,
+      "save_interval": 10,
+      "checkpoint_dir": "experiments/splatflow_fixed_ultra_conservative_1749596484/checkpoints",
+      "dataset_name": "enhanced_real",
+      "steps_per_epoch": 50,
+      "gradient_accumulation_steps": 8,
+      "mixed_precision": true,
+      "gradient_checkpointing": true,
+      "disable_adaptive_birth": true,
+      "max_births_per_epoch": 0,
+      "birth_cooldown": 999,
+      "dataset_config": "conservative",
+      "enable_detailed_monitoring": false
+    },
+    "total_epochs": 3,
+    "total_steps": 189,
+    "best_loss": 6.0961525249481205,
+    "final_model_stats": {
+      "epoch": 2,
+      "total_splats": 14,
+      "total_healthy_splats": 14,
+      "health_percentage": 100.0,
+      "overall_health": "\ud83d\udfe2 HEALTHY",
+      "layer_stats": [
+        {
+          "layer_idx": 0,
+          "num_splats": 7,
+          "healthy_splats": 7,
+          "avg_usefulness": 4.225766291806023,
+          "avg_trajectory_influence": 0.12064526640943118,
+          "trajectory_strength": 0.6456562876701355,
+          "coverage_efficiency": 0.0,
+          "birth_stats": {
+            "total_births": 2,
+            "total_deaths": 0,
+            "births_this_epoch": 2,
+            "pending_requests": 96,
+            "cooldown_remaining": 0,
+            "birth_reasons": {
+              "coverage_gap": 1,
+              "radius_limit_reached": 1
+            },
+            "max_splats": 128,
+            "max_radius": 10.0,
+            "coverage_stats": {
+              "gaps_detected": 1,
+              "clusters_found": 3,
+              "coverage_threshold": 0.1,
+              "min_cluster_size": 3
+            }
+          },
+          "health_status": "\ud83d\udfe2 HEALTHY (Early)"
+        },
+        {
+          "layer_idx": 1,
+          "num_splats": 7,
+          "healthy_splats": 7,
+          "avg_usefulness": 5.0,
+          "avg_trajectory_influence": 1.487850314889635,
+          "trajectory_strength": 0.7109494805335999,
+          "coverage_efficiency": 0.0,
+          "birth_stats": {
+            "total_births": 2,
+            "total_deaths": 0,
+            "births_this_epoch": 2,
+            "pending_requests": 1296,
+            "cooldown_remaining": 0,
+            "birth_reasons": {
+              "trajectory_bottleneck": 1,
+              "radius_limit_reached": 1
+            },
+            "max_splats": 128,
+            "max_radius": 10.0,
+            "coverage_stats": {
+              "gaps_detected": 0,
+              "clusters_found": 0,
+              "coverage_threshold": 0.1,
+              "min_cluster_size": 3
+            }
+          },
+          "health_status": "\ud83d\udfe2 HEALTHY (Early)"
+        }
+      ],
+      "trajectory_stats": {
+        "layer_flow_magnitudes": {
+          "0": 0.11991304159164429,
+          "1": 0.6564891338348389
+        },
+        "total_layers_with_flow": 2,
+        "max_flow_magnitude": 0.6564891338348389,
+        "avg_flow_magnitude": 0.3882010877132416,
+        "guidance": {
+          "guidance_strengths_by_layer": [
+            0.6211528778076172,
+            0.6651886701583862
+          ],
+          "avg_guidance_strength": 0.6431707739830017,
+          "max_guidance_strength": 0.6651886701583862,
+          "guidance_active_layers": 2
+        },
+        "cache": {
+          "cache_size": 25,
+          "cache_hits": 1065,
+          "cache_misses": 294,
+          "hit_rate": 0.7836644591611479,
+          "total_requests": 1359
+        }
+      },
+      "model_info": {
+        "num_layers": 2,
+        "model_dim": 256,
+        "num_splats_per_layer": 5,
+        "max_seq_len": 2048
+      }
+    },
+    "training_stats": [
+      {
+        "epoch": 0,
+        "loss": 8.37967474937439,
+        "lr": 0.00029999733521557923,
+        "time": 22.343634366989136,
+        "steps": 50
+      },
+      {
+        "epoch": 1,
+        "loss": 6.212645998001099,
+        "lr": 0.0002999893409675172,
+        "time": 12.980427026748657,
+        "steps": 50
+      },
+      {
+        "epoch": 2,
+        "loss": 6.0961525249481205,
+        "lr": 0.00029997601757141283,
+        "time": 10.448068141937256,
+        "steps": 50
+      }
+    ],
+    "device": "cuda"
+  },
+  "completed_at": "2025-06-10T18:02:42.729925",
+  "context_length": 1024,
+  "fixes_applied": [
+    "Memory-safe configurations",
+    "Conservative splat birth control",
+    "Gradient accumulation for small batches",
+    "Progressive layer training"
+  ]
+}
