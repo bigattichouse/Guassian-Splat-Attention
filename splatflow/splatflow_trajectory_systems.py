@@ -1,636 +1,563 @@
 """
-SplatFlow Trajectory Systems Module
-Advanced trajectory guidance, caching, and positional embedding systems for SplatFlow.
+SplatFlow Trajectory Systems - Fixed Implementation
+Advanced trajectory guidance and caching with proper method interfaces.
+
+This module provides:
+- Enhanced inter-layer trajectory flow with correct method signatures
+- Trajectory caching for efficiency  
+- Enhanced positional embeddings
+- Compatible interface for model architecture
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-import numpy as np
 import logging
-from typing import Tuple, Optional, Dict, List, Any
-from collections import defaultdict
+from typing import Optional, Tuple, Dict, List, Any, Union
 
 logger = logging.getLogger(__name__)
 
-def safe_tensor_to_scalar(tensor: torch.Tensor, default: float = 0.0) -> float:
-    """Safely convert tensor to scalar with proper error handling"""
-    try:
-        if tensor.numel() == 1:
-            return tensor.item()
-        elif tensor.numel() > 1:
-            return tensor.mean().item()
-        else:
-            return default
-    except Exception:
-        return default
 
-
-class TrajectoryGuidanceSystem(nn.Module):
-    """Advanced trajectory guidance system for goal-directed trajectory steering"""
+class TrajectoryPositionEncoding(nn.Module):
+    """
+    Enhanced positional encoding with trajectory-based adjustments.
+    """
     
-    def __init__(self, model_dim: int, num_layers: int, max_seq_len: int = 2048):
+    def __init__(
+        self,
+        model_dim: int,
+        max_seq_len: int = 8192,
+        trajectory_strength: float = 0.1,
+        enable_caching: bool = True
+    ):
         super().__init__()
         self.model_dim = model_dim
-        self.num_layers = num_layers
         self.max_seq_len = max_seq_len
+        self.trajectory_strength = trajectory_strength
+        self.enable_caching = enable_caching
         
-        # Learnable trajectory guidance networks
-        self.guidance_networks = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(model_dim * 2, model_dim),
-                nn.GELU(),
-                nn.Linear(model_dim, model_dim),
-                nn.Tanh()
-            ) for _ in range(num_layers)
-        ])
+        # Create positional encoding table
+        pe = torch.zeros(max_seq_len, model_dim)
+        position = torch.arange(0, max_seq_len, dtype=torch.float).unsqueeze(1)
         
-        # Context-aware trajectory targets
-        self.target_generator = nn.Sequential(
-            nn.Linear(model_dim, model_dim * 2),
-            nn.GELU(),
-            nn.Linear(model_dim * 2, model_dim),
-            nn.Dropout(0.1)
-        )
+        div_term = torch.exp(torch.arange(0, model_dim, 2).float() * 
+                            (-math.log(10000.0) / model_dim))
         
-        # Task-specific trajectory modulation
-        self.task_modulators = nn.ParameterList([
-            nn.Parameter(torch.randn(model_dim) * 0.1)
-            for _ in range(num_layers)
-        ])
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
         
-        # Guidance strength controllers
-        self.guidance_strengths = nn.ParameterList([
-            nn.Parameter(torch.tensor(0.5 + i * 0.2))
-            for i in range(num_layers)
-        ])
+        self.register_buffer('pe', pe.unsqueeze(0))  # [1, max_seq_len, model_dim]
         
-        logger.info(f"🎯 Trajectory Guidance System initialized for {num_layers} layers")
-    
-    def compute_contextual_targets(self, embeddings: torch.Tensor, layer_idx: int) -> torch.Tensor:
-        """Compute context-aware trajectory targets"""
-        try:
-            batch_size, seq_len, dim = embeddings.shape
-            
-            if seq_len == 0 or batch_size == 0:
-                return torch.zeros_like(embeddings)
-            
-            context = embeddings.mean(dim=1)
-            targets = self.target_generator(context)
-            
-            if layer_idx < len(self.task_modulators):
-                task_mod = self.task_modulators[layer_idx]
-                targets = targets + task_mod.unsqueeze(0)
-            
-            targets = targets.unsqueeze(1).expand(-1, seq_len, -1)
-            
-            return targets
-        except Exception as e:
-            logger.warning(f"Failed to compute contextual targets: {e}")
-            return torch.zeros_like(embeddings)
-    
-    def compute_guided_trajectories(self, embeddings: torch.Tensor, 
-                                  base_trajectories: torch.Tensor,
-                                  layer_idx: int) -> torch.Tensor:
-        """Compute trajectories with guidance toward contextual targets"""
-        
-        try:
-            targets = self.compute_contextual_targets(embeddings, layer_idx)
-            
-            combined_input = torch.cat([embeddings, targets], dim=-1)
-            
-            if layer_idx < len(self.guidance_networks):
-                guidance_vectors = self.guidance_networks[layer_idx](combined_input)
-            else:
-                guidance_vectors = torch.zeros_like(embeddings)
-            
-            if layer_idx < len(self.guidance_strengths):
-                guidance_strength = torch.sigmoid(self.guidance_strengths[layer_idx])
-            else:
-                guidance_strength = torch.tensor(0.5)
-            
-            guided_trajectories = (
-                (1 - guidance_strength) * base_trajectories + 
-                guidance_strength * guidance_vectors
-            )
-            
-            return guided_trajectories
-        except Exception as e:
-            logger.warning(f"Failed to compute guided trajectories for layer {layer_idx}: {e}")
-            return base_trajectories
-    
-    def get_guidance_statistics(self) -> Dict:
-        """Get guidance system statistics with safe calculations"""
-        try:
-            strengths = []
-            for s in self.guidance_strengths:
-                try:
-                    strength_val = torch.sigmoid(s).item()
-                    strengths.append(strength_val)
-                except Exception:
-                    strengths.append(0.5)  # Default value
-            
-            if len(strengths) > 0:
-                avg_strength = sum(strengths) / len(strengths)
-                max_strength = max(strengths)
-                active_layers = sum(1 for s in strengths if s > 0.1)
-            else:
-                avg_strength = 0.0
-                max_strength = 0.0
-                active_layers = 0
-            
-            return {
-                'guidance_strengths_by_layer': strengths,
-                'avg_guidance_strength': avg_strength,
-                'max_guidance_strength': max_strength,
-                'guidance_active_layers': active_layers
-            }
-        except Exception as e:
-            logger.warning(f"Failed to get guidance statistics: {e}")
-            return {
-                'guidance_strengths_by_layer': [],
-                'avg_guidance_strength': 0.0,
-                'max_guidance_strength': 0.0,
-                'guidance_active_layers': 0
-            }
-
-
-class TrajectoryCache(nn.Module):
-    """Efficient trajectory caching system for storing and reusing computed trajectories"""
-    
-    def __init__(self, model_dim: int, cache_size: int = 25, similarity_threshold: float = 0.98):
-        super().__init__()
-        self.model_dim = model_dim
-        self.cache_size = cache_size
-        self.similarity_threshold = similarity_threshold
-        
-        self.trajectory_cache = {}
-        self.cache_keys = []
-        self.cache_usage_count = defaultdict(int)
-        self.cache_hits = 0
-        self.cache_misses = 0
-        
-        # Learned cache key generator
-        self.key_generator = nn.Sequential(
+        # Trajectory displacement network
+        self.trajectory_net = nn.Sequential(
             nn.Linear(model_dim, model_dim // 2),
-            nn.GELU(),
-            nn.Linear(model_dim // 2, 64),
+            nn.ReLU(),
+            nn.Linear(model_dim // 2, model_dim),
             nn.Tanh()
         )
         
-        logger.info(f"🗄️ Trajectory Cache initialized (size: {cache_size})")
+        # Caching for efficiency
+        if enable_caching:
+            self.register_buffer('cached_positions', torch.zeros(1, 1, model_dim))
+            self.register_buffer('cache_valid', torch.tensor(False))
     
-    def generate_cache_key(self, embeddings: torch.Tensor) -> torch.Tensor:
-        """Generate cache key for given embeddings"""
-        try:
-            # Take mean across batch and sequence to get single representative vector
-            if embeddings.dim() == 3:  # (batch, seq, dim)
-                if embeddings.size(0) > 0 and embeddings.size(1) > 0:
-                    sequence_repr = embeddings.mean(dim=(0, 1))  # (dim,)
-                else:
-                    sequence_repr = torch.zeros(embeddings.size(-1), device=embeddings.device)
-            else:
-                sequence_repr = embeddings.mean(dim=0)  # Handle other cases
-            
-            cache_key = self.key_generator(sequence_repr.unsqueeze(0))  # (1, key_dim)
-            return cache_key.squeeze(0)  # (key_dim,) - single vector, not batched
-        except Exception as e:
-            logger.warning(f"Failed to generate cache key: {e}")
-            return torch.zeros(64, device=embeddings.device)
-    
-    def find_similar_cached_trajectory(self, cache_key: torch.Tensor) -> Optional[torch.Tensor]:
-        """Find similar cached trajectory if it exists"""
-        if len(self.cache_keys) == 0:
-            return None
+    def forward(
+        self, 
+        token_embeddings: torch.Tensor,
+        position_ids: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """
+        Apply trajectory-enhanced positional encoding.
         
-        try:
-            cache_key_tensor = torch.stack(self.cache_keys, dim=0)
+        Args:
+            token_embeddings: [batch, seq_len, model_dim]
+            position_ids: [batch, seq_len] optional position indices
             
-            # Ensure cache_key is 1D
-            if cache_key.dim() > 1:
-                cache_key = cache_key.squeeze()
-            
-            similarities = F.cosine_similarity(
-                cache_key.unsqueeze(0), 
-                cache_key_tensor, 
-                dim=1
-            )
-            
-            max_similarity, best_idx = torch.max(similarities, dim=0)
-            
-            # Use safe conversion here
-            max_sim_val = safe_tensor_to_scalar(max_similarity)
-            if max_sim_val > self.similarity_threshold:
-                best_key = self.cache_keys[best_idx.item()]
-                key_str = str(best_key.detach().cpu().numpy().tobytes())
-                
-                if key_str in self.trajectory_cache:
-                    self.cache_hits += 1
-                    self.cache_usage_count[key_str] += 1
-                    return self.trajectory_cache[key_str].clone()
-            
-            self.cache_misses += 1
-            return None
-            
-        except Exception as e:
-            logger.warning(f"Cache lookup failed: {e}")
-            self.cache_misses += 1
-            return None
-    
-    def store_trajectory(self, cache_key: torch.Tensor, trajectory: torch.Tensor):
-        """Store trajectory in cache"""
-        try:
-            if cache_key.dim() > 1:
-                cache_key = cache_key.squeeze()
-            
-            key_str = str(cache_key.detach().cpu().numpy().tobytes())
-            
-            self.trajectory_cache[key_str] = trajectory.clone().detach()
-            self.cache_keys.append(cache_key.clone().detach())
-            
-            if len(self.cache_keys) > self.cache_size:
-                self._evict_least_used()
-                
-        except Exception as e:
-            logger.warning(f"Failed to store trajectory in cache: {e}")
-    
-    def _evict_least_used(self):
-        """Evict least recently used cache entries"""
-        try:
-            if not self.cache_usage_count:
-                if len(self.cache_keys) > 0:
-                    oldest_key = self.cache_keys[0]
-                    key_str = str(oldest_key.detach().cpu().numpy().tobytes())
-                else:
-                    return
-            else:
-                least_used_key = min(self.cache_usage_count.keys(), 
-                                    key=self.cache_usage_count.get)
-                key_str = least_used_key
-                
-                # Find corresponding tensor key
-                oldest_key = None
-                for i, key_tensor in enumerate(self.cache_keys):
-                    if str(key_tensor.detach().cpu().numpy().tobytes()) == key_str:
-                        oldest_key = self.cache_keys[i]
-                        break
-                
-                if oldest_key is None:
-                    return
-            
-            if key_str in self.trajectory_cache:
-                del self.trajectory_cache[key_str]
-            if key_str in self.cache_usage_count:
-                del self.cache_usage_count[key_str]
-            
-            self.cache_keys = [k for k in self.cache_keys 
-                              if str(k.detach().cpu().numpy().tobytes()) != key_str]
-        except Exception as e:
-            logger.warning(f"Cache eviction failed: {e}")
-    
-    def get_cache_statistics(self) -> Dict:
-        """Get cache performance statistics with safe division"""
-        try:
-            total_requests = self.cache_hits + self.cache_misses
-            if total_requests > 0:
-                hit_rate = self.cache_hits / total_requests
-            else:
-                hit_rate = 0.0
-            
-            return {
-                'cache_size': len(self.cache_keys),
-                'cache_hits': self.cache_hits,
-                'cache_misses': self.cache_misses,
-                'hit_rate': hit_rate,
-                'total_requests': total_requests
-            }
-        except Exception as e:
-            logger.warning(f"Failed to get cache statistics: {e}")
-            return {
-                'cache_size': 0,
-                'cache_hits': 0,
-                'cache_misses': 0,
-                'hit_rate': 0.0,
-                'total_requests': 0
-            }
+        Returns:
+            Enhanced embeddings with positional and trajectory information
+        """
+        batch_size, seq_len, _ = token_embeddings.shape
+        
+        # Get base positional encodings
+        if position_ids is None:
+            position_ids = torch.arange(seq_len, device=token_embeddings.device).unsqueeze(0)
+        
+        # Extract positional encodings
+        pos_encodings = self.pe[:, :seq_len, :]  # [1, seq_len, model_dim]
+        pos_encodings = pos_encodings.expand(batch_size, -1, -1)
+        
+        # Compute trajectory adjustments
+        trajectory_adjustments = self.trajectory_net(token_embeddings)
+        trajectory_adjustments = trajectory_adjustments * self.trajectory_strength
+        
+        # Combine base position with trajectory adjustments
+        enhanced_positions = pos_encodings + trajectory_adjustments
+        
+        return token_embeddings + enhanced_positions
 
 
-class TrajectoryAwarePositionalEmbedding(nn.Module):
-    """Enhanced positional embedding integrating trajectory information - FIXED DIMENSIONS"""
+class TrajectoryCache(nn.Module):
+    """
+    Caching system for trajectory computations to improve efficiency.
+    """
     
-    def __init__(self, model_dim: int, max_seq_len: int = 2048):
+    def __init__(
+        self,
+        cache_size: int = 1000,
+        model_dim: int = 512,
+        similarity_threshold: float = 0.95
+    ):
         super().__init__()
+        self.cache_size = cache_size
         self.model_dim = model_dim
-        self.max_seq_len = max_seq_len
+        self.similarity_threshold = similarity_threshold
         
-        self.position_embedding = nn.Embedding(max_seq_len, model_dim)
-        
-        # FIXED: Correct projection layer input dimension
-        self.trajectory_position_proj = nn.Linear(model_dim, model_dim)  # Changed from model_dim * 2
-        
-        self.trajectory_directions = nn.Parameter(
-            torch.randn(max_seq_len, model_dim // 4) * 0.1
-        )
-        
-        self.position_scales = nn.Parameter(
-            torch.ones(max_seq_len) * 0.5
-        )
-        
-        self.register_buffer('trajectory_frequencies', 
-                           self._create_trajectory_frequencies())
-        
-        logger.info(f"📍 Trajectory-Aware Positional Embedding initialized")
+        # Cache storage
+        self.register_buffer('cache_keys', torch.zeros(cache_size, model_dim))
+        self.register_buffer('cache_values', torch.zeros(cache_size, model_dim))
+        self.register_buffer('cache_valid', torch.zeros(cache_size, dtype=torch.bool))
+        self.register_buffer('cache_usage', torch.zeros(cache_size))
+        self.register_buffer('cache_ptr', torch.tensor(0))
     
-    def _create_trajectory_frequencies(self) -> torch.Tensor:
-        """Create sinusoidal frequencies for trajectory encoding"""
-        try:
-            position = torch.arange(self.max_seq_len).unsqueeze(1).float()
-            div_term = torch.exp(torch.arange(0, self.model_dim // 4, 2).float() *
-                               -(math.log(10000.0) / max(self.model_dim // 4, 1)))
+    def lookup(self, query: torch.Tensor) -> Optional[torch.Tensor]:
+        """
+        Look up cached trajectory for similar input.
+        
+        Args:
+            query: [model_dim] query vector
             
-            freqs = torch.zeros(self.max_seq_len, self.model_dim // 4)
-            freqs[:, 0::2] = torch.sin(position * div_term)
-            freqs[:, 1::2] = torch.cos(position * div_term)
+        Returns:
+            Cached trajectory if found, None otherwise
+        """
+        if not self.cache_valid.any():
+            return None
+        
+        # Compute similarities
+        valid_keys = self.cache_keys[self.cache_valid]
+        similarities = F.cosine_similarity(query.unsqueeze(0), valid_keys, dim=1)
+        
+        # Check if any similarity exceeds threshold
+        max_sim, max_idx = similarities.max(dim=0)
+        if max_sim > self.similarity_threshold:
+            # Update usage counter
+            valid_indices = torch.where(self.cache_valid)[0]
+            cache_idx = valid_indices[max_idx]
+            self.cache_usage[cache_idx] += 1
             
-            return freqs
-        except Exception as e:
-            logger.warning(f"Failed to create trajectory frequencies: {e}")
-            return torch.zeros(self.max_seq_len, self.model_dim // 4)
+            return self.cache_values[cache_idx]
+        
+        return None
     
-    def forward(self, input_embeddings: torch.Tensor, 
-                trajectories: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """Compute trajectory-aware positional embeddings - FIXED DIMENSIONS"""
-        try:
-            batch_size, seq_len, model_dim = input_embeddings.shape
-            device = input_embeddings.device
-            
-            # Clamp sequence length to avoid index errors
-            seq_len = min(seq_len, self.max_seq_len)
-            
-            positions = torch.arange(seq_len, device=device)
-            pos_embeddings = self.position_embedding(positions)
-            
-            if trajectories is not None and trajectories.size(1) >= seq_len:
-                try:
-                    # SIMPLIFIED: Use trajectory information more directly without complex concatenation
-                    pos_scales = torch.sigmoid(self.position_scales[:seq_len])
-                    scaled_trajectories = trajectories[:, :seq_len, :] * pos_scales.unsqueeze(0).unsqueeze(-1)
-                    
-                    # Simple weighted combination instead of complex projection
-                    trajectory_weight = 0.1  # Small influence factor
-                    trajectory_component = scaled_trajectories * trajectory_weight
-                    
-                    # Ensure same dimensions
-                    if trajectory_component.shape[-1] == model_dim:
-                        enhanced_pos = pos_embeddings.unsqueeze(0) + trajectory_component
-                    else:
-                        # If dimensions don't match, just use basic positional embedding
-                        enhanced_pos = pos_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
-                    
-                except Exception as inner_e:
-                    logger.warning(f"Trajectory integration failed: {inner_e}, using basic positional")
-                    enhanced_pos = pos_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
-            else:
-                enhanced_pos = pos_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
-            
-            return enhanced_pos
-            
-        except Exception as e:
-            logger.warning(f"Trajectory-aware positional embedding failed: {e}")
-            # Fallback to basic positional embedding
-            try:
-                batch_size, seq_len, model_dim = input_embeddings.shape
-                device = input_embeddings.device
-                seq_len = min(seq_len, self.max_seq_len)
-                positions = torch.arange(seq_len, device=device)
-                pos_embeddings = self.position_embedding(positions)
-                return pos_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
-            except Exception as fallback_e:
-                logger.error(f"Even fallback positional embedding failed: {fallback_e}")
-                return torch.zeros_like(input_embeddings)
+    def store(self, key: torch.Tensor, value: torch.Tensor):
+        """
+        Store a key-value pair in the cache.
+        
+        Args:
+            key: [model_dim] input key
+            value: [model_dim] trajectory value
+        """
+        ptr = int(self.cache_ptr)
+        
+        self.cache_keys[ptr] = key.detach()
+        self.cache_values[ptr] = value.detach()
+        self.cache_valid[ptr] = True
+        self.cache_usage[ptr] = 1
+        
+        # Update pointer (circular buffer)
+        self.cache_ptr = (ptr + 1) % self.cache_size
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache performance statistics."""
+        valid_count = int(self.cache_valid.sum())
+        total_usage = int(self.cache_usage.sum())
+        
+        return {
+            'cache_size': self.cache_size,
+            'valid_entries': valid_count,
+            'total_usage': total_usage,
+            'hit_rate': total_usage / max(valid_count, 1),
+            'fill_ratio': valid_count / self.cache_size
+        }
 
 
 class EnhancedInterLayerTrajectoryFlow(nn.Module):
-    """Enhanced trajectory flow system with guidance, caching, and positional integration"""
+    """
+    Enhanced inter-layer trajectory flow system with proper method interfaces.
+    Provides sophisticated trajectory guidance and communication between layers.
+    """
     
-    def __init__(self, num_layers: int, model_dim: int, max_seq_len: int = 2048):
+    def __init__(
+        self,
+        model_dim: int,
+        num_layers: int,
+        max_seq_len: int = 4096,
+        trajectory_strength: float = 0.1,
+        enable_caching: bool = True,
+        flow_dropout: float = 0.1
+    ):
         super().__init__()
-        self.num_layers = num_layers
         self.model_dim = model_dim
+        self.num_layers = num_layers
         self.max_seq_len = max_seq_len
+        self.trajectory_strength = trajectory_strength
+        self.enable_caching = enable_caching
         
-        # Core trajectory flow
-        self.trajectory_bridges = nn.ModuleList([
+        # Trajectory position encoding
+        self.position_encoding = TrajectoryPositionEncoding(
+            model_dim=model_dim,
+            max_seq_len=max_seq_len,
+            trajectory_strength=trajectory_strength,
+            enable_caching=enable_caching
+        )
+        
+        # Inter-layer flow networks
+        self.flow_networks = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(model_dim, model_dim),
-                nn.GELU(),
+                nn.ReLU(),
+                nn.Dropout(flow_dropout),
                 nn.Linear(model_dim, model_dim),
-                nn.Dropout(0.1)
-            ) for _ in range(1, num_layers)
-        ])
-        
-        # Trajectory connections
-        self.trajectory_strengths = nn.ParameterList([
-            nn.Parameter(torch.tensor(0.5 + i * 0.3))
-            for i in range(1, num_layers)
-        ])
-        
-        # Enhanced components
-        self.guidance_system = TrajectoryGuidanceSystem(model_dim, num_layers, max_seq_len)
-        self.trajectory_cache = TrajectoryCache(model_dim)
-        self.enhanced_positional = TrajectoryAwarePositionalEmbedding(model_dim, max_seq_len)
-        
-        # Statistics
-        self.layer_trajectories = {}
-        self.flow_statistics = {}
-        
-        logger.info(f"🌟 Enhanced InterLayer trajectory flow initialized")
-        logger.info(f"   ✅ Trajectory guidance system")
-        logger.info(f"   ✅ Trajectory caching (size: {self.trajectory_cache.cache_size})")
-        logger.info(f"   ✅ Enhanced positional embedding")
-    
-    def compute_enhanced_trajectory_flow(self, layer_idx: int, 
-                                       embeddings: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Compute enhanced trajectory flow with all advanced features"""
-        try:
-            batch_size, seq_len, dim = embeddings.shape
-            device = embeddings.device
-            
-            if batch_size == 0 or seq_len == 0:
-                zero_trajectory = torch.zeros_like(embeddings)
-                zero_position = torch.zeros_like(embeddings)
-                return zero_trajectory, zero_position
-            
-            # Try cache first
-            cache_key = self.trajectory_cache.generate_cache_key(embeddings)
-            cached_trajectory = self.trajectory_cache.find_similar_cached_trajectory(cache_key)
-            
-            if cached_trajectory is not None and cached_trajectory.shape == embeddings.shape:
-                base_trajectories = cached_trajectory
-            else:
-                base_trajectories = self._compute_base_trajectories(layer_idx, embeddings)
-                self.trajectory_cache.store_trajectory(cache_key, base_trajectories)
-            
-            # Apply trajectory guidance
-            guided_trajectories = self.guidance_system.compute_guided_trajectories(
-                embeddings, base_trajectories, layer_idx
+                nn.Tanh()
             )
-            
-            # Compute enhanced positional embeddings with safe error handling
-            try:
-                enhanced_positions = self.enhanced_positional(embeddings, guided_trajectories)
-            except Exception as pos_e:
-                logger.warning(f"Enhanced positional embedding failed: {pos_e}")
-                # Fallback to simple positional embedding
-                enhanced_positions = torch.zeros_like(embeddings)
-            
-            # Store for analysis
-            self.layer_trajectories[layer_idx] = guided_trajectories.detach().clone()
-            flow_magnitude = safe_tensor_to_scalar(torch.norm(guided_trajectories, dim=-1).mean())
-            self.flow_statistics[layer_idx] = flow_magnitude
-            
-            return guided_trajectories, enhanced_positions
-        except Exception as e:
-            logger.warning(f"Enhanced trajectory flow computation failed for layer {layer_idx}: {e}")
-            # Return safe fallback
-            zero_trajectory = torch.zeros_like(embeddings)
-            zero_position = torch.zeros_like(embeddings)
-            return zero_trajectory, zero_position
+            for _ in range(num_layers)
+        ])
+        
+        # Layer-specific trajectory guidance
+        self.trajectory_guides = nn.ModuleList([
+            nn.Linear(model_dim, model_dim)
+            for _ in range(num_layers)
+        ])
+        
+        # Trajectory momentum (for stability)
+        self.momentum_networks = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(model_dim * 2, model_dim),
+                nn.Sigmoid()
+            )
+            for _ in range(num_layers)
+        ])
+        
+        # Caching system
+        if enable_caching:
+            self.trajectory_cache = TrajectoryCache(
+                cache_size=1000,
+                model_dim=model_dim
+            )
+        else:
+            self.trajectory_cache = None
+        
+        # Health monitoring
+        self.register_buffer('flow_applications', torch.zeros(num_layers))
+        self.register_buffer('trajectory_magnitudes', torch.zeros(num_layers))
+        
+        # Previous layer states for momentum
+        self.previous_states = [None] * num_layers
+        
+        logger.info(f"🌊 EnhancedInterLayerTrajectoryFlow initialized: {num_layers} layers, {model_dim}d")
     
-    def _compute_base_trajectories(self, layer_idx: int, embeddings: torch.Tensor) -> torch.Tensor:
-        """Compute base trajectory vectors with enhanced sensitivity"""
-        try:
-            batch_size, seq_len, dim = embeddings.shape
-            device = embeddings.device
+    def initialize_trajectories(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+        Initialize trajectory flow for the input embeddings.
+        This method is called at the beginning of the forward pass.
+        
+        Args:
+            hidden_states: [batch, seq_len, model_dim] input embeddings
             
-            if seq_len < 2:
-                return torch.zeros_like(embeddings)
-            
-            trajectories = torch.zeros_like(embeddings)
-            
-            for pos in range(1, seq_len):
-                try:
-                    window_start = max(0, pos - 6)
-                    
-                    if window_start < pos:
-                        window_embeddings = embeddings[:, window_start:pos, :]
-                        next_embeddings = embeddings[:, window_start+1:pos+1, :]
-                        
-                        traj_vectors = next_embeddings - window_embeddings
-                        traj_magnitudes = torch.norm(traj_vectors, dim=-1, keepdim=True)
-                        
-                        valid_mask = traj_magnitudes.squeeze(-1) > 1e-8
-                        
-                        if valid_mask.any():
-                            normalized_trajs = torch.zeros_like(traj_vectors)
-                            valid_mags = traj_magnitudes[valid_mask]
-                            normalized_trajs[valid_mask] = traj_vectors[valid_mask] / (valid_mags + 1e-10)
-                            
-                            window_size = pos - window_start
-                            weights = torch.exp(torch.linspace(-1, 0, window_size, device=device))
-                            weights = weights.unsqueeze(0).unsqueeze(-1)
-                            
-                            depth_scale = 0.2 * (1 + layer_idx * 1.2)
-                            
-                            weighted_traj = (normalized_trajs * weights).sum(dim=1)
-                            weight_sum = weights.sum(dim=1)
-                            
-                            # Safe division
-                            final_traj = weighted_traj / (weight_sum + 1e-8)
-                            trajectories[:, pos, :] = final_traj * depth_scale
-                except Exception as e:
-                    logger.warning(f"Failed to compute trajectory for position {pos}: {e}")
-                    continue
-            
-            return trajectories
-        except Exception as e:
-            logger.warning(f"Base trajectory computation failed: {e}")
-            return torch.zeros_like(embeddings)
+        Returns:
+            Enhanced embeddings with initial trajectory information
+        """
+        # Apply trajectory-enhanced positional encoding
+        enhanced_states = self.position_encoding(hidden_states)
+        
+        # Reset previous states for new sequence
+        self.previous_states = [None] * self.num_layers
+        
+        logger.debug(f"🌊 Initialized trajectories for {hidden_states.shape}")
+        return enhanced_states
     
-    def apply_skip_connections(self, layer_trajectories: List[torch.Tensor]) -> List[torch.Tensor]:
-        """Apply skip connections from Layer 0 to upper layers"""
-        try:
-            if len(layer_trajectories) == 0:
-                return layer_trajectories
+    def apply_inter_layer_flow(
+        self, 
+        hidden_states: torch.Tensor, 
+        layer_idx: int
+    ) -> torch.Tensor:
+        """
+        Apply inter-layer trajectory flow between transformer layers.
+        
+        Args:
+            hidden_states: [batch, seq_len, model_dim] current layer output
+            layer_idx: Index of the current layer
             
-            enhanced_trajectories = [layer_trajectories[0]]
-            base_trajectory = layer_trajectories[0]
+        Returns:
+            Enhanced hidden states with trajectory flow applied
+        """
+        if layer_idx >= self.num_layers:
+            return hidden_states
+        
+        batch_size, seq_len, model_dim = hidden_states.shape
+        
+        # Update flow applications counter
+        self.flow_applications[layer_idx] += 1
+        
+        # Get layer-specific trajectory guidance
+        trajectory_guide = self.trajectory_guides[layer_idx](hidden_states)
+        
+        # Apply flow network transformation
+        flow_delta = self.flow_networks[layer_idx](hidden_states)
+        flow_delta = flow_delta * self.trajectory_strength
+        
+        # Apply momentum if we have previous state
+        if self.previous_states[layer_idx] is not None:
+            previous_state = self.previous_states[layer_idx]
             
-            for i, (bridge, strength) in enumerate(zip(self.trajectory_bridges, self.trajectory_strengths)):
-                layer_idx = i + 1
-                
-                try:
-                    if layer_idx < len(layer_trajectories):
-                        original_traj = layer_trajectories[layer_idx]
-                        skip_traj = bridge(base_trajectory)
-                        
-                        gate_strength = torch.sigmoid(strength)
-                        combined_traj = (1 - gate_strength) * original_traj + gate_strength * skip_traj
-                        
-                        enhanced_trajectories.append(combined_traj)
-                    else:
-                        skip_traj = bridge(base_trajectory)
-                        enhanced_trajectories.append(skip_traj)
-                except Exception as e:
-                    logger.warning(f"Skip connection failed for layer {layer_idx}: {e}")
-                    # Use original trajectory if available, otherwise zero
-                    if layer_idx < len(layer_trajectories):
-                        enhanced_trajectories.append(layer_trajectories[layer_idx])
-                    else:
-                        enhanced_trajectories.append(torch.zeros_like(base_trajectory))
+            # Compute momentum weights
+            combined_state = torch.cat([hidden_states, previous_state], dim=-1)
+            momentum_weights = self.momentum_networks[layer_idx](combined_state)
             
-            return enhanced_trajectories
-        except Exception as e:
-            logger.warning(f"Skip connections failed: {e}")
-            return layer_trajectories
-    
-    def get_comprehensive_statistics(self) -> Dict:
-        """Get comprehensive statistics including new features with safe calculations"""
-        try:
-            # Base statistics with safe calculations
-            if len(self.flow_statistics) > 0:
-                flow_values = list(self.flow_statistics.values())
-                total_layers_with_flow = len([m for m in flow_values if m > 0.001])
-                max_flow_magnitude = max(flow_values)
-                avg_flow_magnitude = sum(flow_values) / len(flow_values)
+            # Apply momentum to flow
+            flow_delta = flow_delta * momentum_weights
+        
+        # Check cache for similar patterns (if enabled)
+        if self.trajectory_cache is not None and not self.training:
+            # Use average embedding as cache key
+            cache_key = hidden_states.mean(dim=(0, 1))  # [model_dim]
+            cached_flow = self.trajectory_cache.lookup(cache_key)
+            
+            if cached_flow is not None:
+                # Use cached trajectory
+                flow_delta = cached_flow.unsqueeze(0).unsqueeze(0).expand_as(flow_delta)
             else:
-                total_layers_with_flow = 0
-                max_flow_magnitude = 0.0
-                avg_flow_magnitude = 0.0
+                # Store current trajectory in cache
+                self.trajectory_cache.store(cache_key, flow_delta.mean(dim=(0, 1)))
+        
+        # Apply trajectory flow
+        enhanced_states = hidden_states + trajectory_guide + flow_delta
+        
+        # Store current state for momentum in next application
+        self.previous_states[layer_idx] = hidden_states.detach()
+        
+        # Update trajectory magnitude tracking
+        with torch.no_grad():
+            magnitude = torch.norm(flow_delta).item()
+            self.trajectory_magnitudes[layer_idx] = (
+                0.9 * self.trajectory_magnitudes[layer_idx] + 0.1 * magnitude
+            )
+        
+        logger.debug(f"🌊 Applied trajectory flow at layer {layer_idx}, magnitude: {magnitude:.4f}")
+        
+        return enhanced_states
+    
+    def get_trajectory_health(self) -> Dict[str, Any]:
+        """Get health statistics for trajectory flow system."""
+        health = {
+            'num_layers': self.num_layers,
+            'flow_applications': self.flow_applications.tolist(),
+            'trajectory_magnitudes': self.trajectory_magnitudes.tolist(),
+            'average_magnitude': float(self.trajectory_magnitudes.mean()),
+            'max_magnitude': float(self.trajectory_magnitudes.max()),
+            'trajectory_strength': self.trajectory_strength,
+            'caching_enabled': self.enable_caching
+        }
+        
+        if self.trajectory_cache is not None:
+            health['cache_stats'] = self.trajectory_cache.get_cache_stats()
+        
+        return health
+    
+    def reset_trajectory_state(self):
+        """Reset trajectory state (useful between sequences)."""
+        self.previous_states = [None] * self.num_layers
+        logger.debug("🌊 Trajectory state reset")
+    
+    def set_trajectory_strength(self, strength: float):
+        """Dynamically adjust trajectory strength."""
+        self.trajectory_strength = strength
+        self.position_encoding.trajectory_strength = strength
+        logger.info(f"🌊 Trajectory strength set to {strength}")
+
+
+class BasicInterLayerTrajectoryFlow(nn.Module):
+    """
+    Simplified trajectory flow for cases where enhanced features aren't needed.
+    Provides the same interface but with minimal computation overhead.
+    """
+    
+    def __init__(
+        self,
+        model_dim: int,
+        num_layers: int,
+        trajectory_strength: float = 0.05
+    ):
+        super().__init__()
+        self.model_dim = model_dim
+        self.num_layers = num_layers
+        self.trajectory_strength = trajectory_strength
+        
+        # Simple trajectory adjustment
+        self.trajectory_projection = nn.Linear(model_dim, model_dim)
+        
+        logger.info(f"🌊 BasicInterLayerTrajectoryFlow initialized: {num_layers} layers")
+    
+    def initialize_trajectories(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """Initialize trajectories (basic version)."""
+        # Simply return input with small trajectory adjustment
+        trajectory_adj = self.trajectory_projection(hidden_states) * self.trajectory_strength
+        return hidden_states + trajectory_adj
+    
+    def apply_inter_layer_flow(
+        self, 
+        hidden_states: torch.Tensor, 
+        layer_idx: int
+    ) -> torch.Tensor:
+        """Apply simple trajectory flow."""
+        if layer_idx >= self.num_layers:
+            return hidden_states
+        
+        # Simple flow application
+        trajectory_adj = self.trajectory_projection(hidden_states) * self.trajectory_strength
+        return hidden_states + trajectory_adj
+    
+    def get_trajectory_health(self) -> Dict[str, Any]:
+        """Get basic health stats."""
+        return {
+            'type': 'basic',
+            'num_layers': self.num_layers,
+            'trajectory_strength': self.trajectory_strength
+        }
+
+
+# Factory functions for creating trajectory systems
+def create_enhanced_trajectory_flow(
+    model_dim: int,
+    num_layers: int,
+    max_seq_len: int = 4096,
+    trajectory_strength: float = 0.1,
+    enable_caching: bool = True,
+    **kwargs
+) -> EnhancedInterLayerTrajectoryFlow:
+    """Create enhanced trajectory flow system."""
+    return EnhancedInterLayerTrajectoryFlow(
+        model_dim=model_dim,
+        num_layers=num_layers,
+        max_seq_len=max_seq_len,
+        trajectory_strength=trajectory_strength,
+        enable_caching=enable_caching,
+        **kwargs
+    )
+
+
+def create_basic_trajectory_flow(
+    model_dim: int,
+    num_layers: int,
+    trajectory_strength: float = 0.05,
+    **kwargs
+) -> BasicInterLayerTrajectoryFlow:
+    """Create basic trajectory flow system."""
+    return BasicInterLayerTrajectoryFlow(
+        model_dim=model_dim,
+        num_layers=num_layers,
+        trajectory_strength=trajectory_strength
+    )
+
+
+# Trajectory flow utilities
+class TrajectoryFlowMonitor:
+    """Monitor trajectory flow performance across training."""
+    
+    def __init__(self):
+        self.flow_history = []
+        self.health_snapshots = []
+    
+    def log_trajectory_step(self, trajectory_flow: EnhancedInterLayerTrajectoryFlow):
+        """Log trajectory flow state for monitoring."""
+        if hasattr(trajectory_flow, 'get_trajectory_health'):
+            health = trajectory_flow.get_trajectory_health()
+            self.health_snapshots.append(health)
             
-            base_stats = {
-                'layer_flow_magnitudes': dict(self.flow_statistics),
-                'total_layers_with_flow': total_layers_with_flow,
-                'max_flow_magnitude': max_flow_magnitude,
-                'avg_flow_magnitude': avg_flow_magnitude
-            }
-            
-            # Get guidance and cache statistics safely
-            try:
-                guidance_stats = self.guidance_system.get_guidance_statistics()
-            except Exception as e:
-                logger.warning(f"Failed to get guidance stats: {e}")
-                guidance_stats = {}
-            
-            try:
-                cache_stats = self.trajectory_cache.get_cache_statistics()
-            except Exception as e:
-                logger.warning(f"Failed to get cache stats: {e}")
-                cache_stats = {}
-            
-            return {
-                **base_stats,
-                'guidance': guidance_stats,
-                'cache': cache_stats
-            }
-        except Exception as e:
-            logger.warning(f"Failed to get comprehensive statistics: {e}")
-            return {
-                'layer_flow_magnitudes': {},
-                'total_layers_with_flow': 0,
-                'max_flow_magnitude': 0.0,
-                'avg_flow_magnitude': 0.0,
-                'guidance': {},
-                'cache': {}
-            }
+            # Keep only recent history
+            if len(self.health_snapshots) > 1000:
+                self.health_snapshots = self.health_snapshots[-500:]
+    
+    def get_trajectory_summary(self) -> Dict[str, Any]:
+        """Get summary of trajectory flow performance."""
+        if not self.health_snapshots:
+            return {'status': 'no_data'}
+        
+        recent_health = self.health_snapshots[-1]
+        return {
+            'current_magnitudes': recent_health.get('trajectory_magnitudes', []),
+            'average_magnitude': recent_health.get('average_magnitude', 0),
+            'trajectory_strength': recent_health.get('trajectory_strength', 0),
+            'snapshots_count': len(self.health_snapshots)
+        }
+
+
+# Global trajectory monitor
+global_trajectory_monitor = TrajectoryFlowMonitor()
+
+
+if __name__ == "__main__":
+    # Test trajectory systems
+    print("🧪 Testing SplatFlow Trajectory Systems...")
+    
+    # Test parameters
+    model_dim, num_layers, seq_len, batch_size = 512, 6, 128, 2
+    
+    # Create test input
+    hidden_states = torch.randn(batch_size, seq_len, model_dim)
+    print(f"📊 Test input: {hidden_states.shape}")
+    
+    # Test enhanced trajectory flow
+    print("\n🌊 Testing EnhancedInterLayerTrajectoryFlow...")
+    enhanced_flow = create_enhanced_trajectory_flow(
+        model_dim=model_dim,
+        num_layers=num_layers,
+        trajectory_strength=0.1
+    )
+    
+    # Test initialization
+    initialized_states = enhanced_flow.initialize_trajectories(hidden_states)
+    print(f"✅ Trajectory initialization: {initialized_states.shape}")
+    
+    # Test inter-layer flow
+    for layer_idx in range(3):
+        flow_output = enhanced_flow.apply_inter_layer_flow(initialized_states, layer_idx)
+        print(f"✅ Layer {layer_idx} flow: {flow_output.shape}")
+        initialized_states = flow_output
+    
+    # Test health monitoring
+    health = enhanced_flow.get_trajectory_health()
+    print(f"🏥 Trajectory health: {health['average_magnitude']:.4f}")
+    
+    # Test basic trajectory flow
+    print("\n🌊 Testing BasicInterLayerTrajectoryFlow...")
+    basic_flow = create_basic_trajectory_flow(
+        model_dim=model_dim,
+        num_layers=num_layers
+    )
+    
+    basic_init = basic_flow.initialize_trajectories(hidden_states)
+    basic_flow_out = basic_flow.apply_inter_layer_flow(basic_init, 0)
+    print(f"✅ Basic trajectory flow: {basic_flow_out.shape}")
+    
+    # Test trajectory caching
+    print("\n💾 Testing TrajectoryCache...")
+    cache = TrajectoryCache(cache_size=100, model_dim=model_dim)
+    
+    test_key = torch.randn(model_dim)
+    test_value = torch.randn(model_dim)
+    
+    cache.store(test_key, test_value)
+    retrieved = cache.lookup(test_key)
+    
+    if retrieved is not None:
+        print("✅ Cache store/lookup successful")
+        print(f"📈 Cache stats: {cache.get_cache_stats()}")
+    
+    # Test monitoring
+    print("\n📊 Testing TrajectoryFlowMonitor...")
+    global_trajectory_monitor.log_trajectory_step(enhanced_flow)
+    summary = global_trajectory_monitor.get_trajectory_summary()
+    print(f"📊 Monitor summary: {summary}")
+    
+    print("\n🎉 All trajectory systems tests passed!")

@@ -1,509 +1,389 @@
 """
 SplatFlow Core Systems Module
-Device management, dataset loading, and utility functions for the SplatFlow training system.
+Device management, dataset loading, and core utilities for the SplatFlow attention mechanism.
 """
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-import time
-import json
-import os
-import gc
-import random
-from typing import Tuple, Optional, Dict, List, Any
-from torch.utils.data import Dataset, DataLoader
-from transformers import GPT2Tokenizer
-from datasets import load_dataset
 import logging
-from datetime import datetime
-from collections import defaultdict
+import gc
+import os
+from typing import Dict, List, Optional, Tuple, Any, Union
+from datasets import load_dataset, Dataset
+from transformers import GPT2Tokenizer
+import numpy as np
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Enable optimizations
-os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
-torch.backends.cudnn.benchmark = True
-torch.backends.cuda.matmul.allow_tf32 = True
-
-def setup_environment():
-    """Setup optimal training environment"""
-    torch.manual_seed(42)
-    np.random.seed(42)
-    random.seed(42)
+class DeviceManager:
+    """Comprehensive device management for SplatFlow training"""
     
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
-
-def cleanup_memory():
-    """Aggressive memory cleanup"""
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-
-def get_gpu_memory_info():
-    """Get current GPU memory usage with safe division"""
-    if torch.cuda.is_available():
-        try:
-            allocated = torch.cuda.memory_allocated() / 1024**3
-            reserved = torch.cuda.memory_reserved() / 1024**3
-            total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-            free = total - reserved
-            
-            # Safe division for percentage calculation
-            if total > 0:
-                percent_used = (allocated / total) * 100
-            else:
-                percent_used = 0.0
-            
-            return {
-                'allocated': allocated,
-                'reserved': reserved,
-                'total': total,
-                'free': free,
-                'percent_used': percent_used
-            }
-        except Exception as e:
-            logger.warning(f"Failed to get GPU memory info: {e}")
+    def __init__(self):
+        self.device = self._initialize_device()
+        self.is_cuda = torch.cuda.is_available()
+        self.device_count = torch.cuda.device_count() if self.is_cuda else 0
+        
+        logger.info(f"🔧 DeviceManager initialized: {self.device}")
+        if self.is_cuda:
+            logger.info(f"🚀 CUDA devices available: {self.device_count}")
+            for i in range(self.device_count):
+                props = torch.cuda.get_device_properties(i)
+                logger.info(f"   GPU {i}: {props.name} ({props.total_memory // 1024**3}GB)")
+    
+    def _initialize_device(self) -> torch.device:
+        """Initialize the primary computation device"""
+        if torch.cuda.is_available():
+            # Use first available GPU
+            device = torch.device('cuda:0')
+            torch.cuda.set_device(device)
+            return device
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            return torch.device('mps')
+        else:
+            return torch.device('cpu')
+    
+    def get_device(self) -> torch.device:
+        """Get the primary computation device"""
+        return self.device
+    
+    def get_gpu_memory_info(self) -> Dict[str, float]:
+        """Get detailed GPU memory information"""
+        if not self.is_cuda:
             return {
                 'allocated': 0.0,
-                'reserved': 0.0,
+                'available': 0.0,
                 'total': 0.0,
-                'free': 0.0,
-                'percent_used': 0.0
+                'percent_used': 0.0,
+                'cached': 0.0
             }
-    return None
-
-def safe_tensor_to_scalar(tensor: torch.Tensor, default: float = 0.0) -> float:
-    """Safely convert tensor to scalar with proper error handling"""
-    try:
-        if tensor is None:
-            return default
-        if tensor.numel() == 1:
-            return tensor.item()
-        elif tensor.numel() > 1:
-            return tensor.mean().item()
-        else:
-            return default
-    except Exception:
-        return default
-
-
-class DeviceManager:
-    """Centralized device management to prevent tensor mismatch errors"""
-    
-    @staticmethod
-    def get_primary_device():
-        """Get the primary device for the model"""
-        return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    @staticmethod
-    def ensure_tensor_device(tensor: torch.Tensor, target_device: torch.device) -> torch.Tensor:
-        """Ensure a tensor is on the target device"""
-        try:
-            if tensor.device != target_device:
-                return tensor.to(target_device)
-            return tensor
-        except Exception as e:
-            logger.warning(f"Failed to move tensor to device {target_device}: {e}")
-            return tensor
-    
-    @staticmethod
-    def safe_cat(tensors: List[torch.Tensor], dim: int = 0, target_device: torch.device = None) -> torch.Tensor:
-        """Safely concatenate tensors ensuring device consistency"""
-        if not tensors:
-            raise ValueError("Cannot concatenate empty tensor list")
         
+        allocated = torch.cuda.memory_allocated() / 1024**3  # GB
+        cached = torch.cuda.memory_reserved() / 1024**3      # GB
+        total = torch.cuda.get_device_properties(self.device).total_memory / 1024**3
+        available = total - allocated
+        
+        return {
+            'allocated': allocated,
+            'available': available,
+            'total': total,
+            'percent_used': (allocated / total) * 100,
+            'cached': cached
+        }
+    
+    def cleanup_memory(self):
+        """Clean up GPU memory and Python garbage collection"""
+        if self.is_cuda:
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        gc.collect()
+        logger.info("🧹 Memory cleanup completed")
+    
+    def move_to_device(self, tensor_or_model: Union[torch.Tensor, nn.Module]) -> Union[torch.Tensor, nn.Module]:
+        """Move tensor or model to the primary device"""
+        return tensor_or_model.to(self.device)
+    
+    def get_memory_summary(self) -> str:
+        """Get a formatted memory usage summary"""
+        mem_info = self.get_gpu_memory_info()
+        return f"GPU Memory: {mem_info['allocated']:.2f}GB allocated, {mem_info['available']:.2f}GB available"
+
+
+class DatasetManager:
+    """Advanced dataset loading and management for SplatFlow training"""
+    
+    def __init__(self, tokenizer_name: str = 'gpt2'):
+        self.tokenizer = GPT2Tokenizer.from_pretrained(tokenizer_name)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        
+        # Available datasets for comprehensive training
+        self.available_datasets = {
+            'wikitext': 'wikitext-2-raw-v1',
+            'openwebtext': 'openwebtext',
+            'bookcorpus': 'bookcorpus',
+            'c4': 'c4',
+            'pile': 'EleutherAI/pile',
+            'common_crawl': 'common_crawl',
+            'github_code': 'codeparrot/github-code',
+            'arxiv': 'arxiv_dataset',
+            'news': 'cnn_dailymail',
+            'dialogue': 'microsoft/DialoGPT-medium',
+            'qa': 'squad',
+            'stories': 'roneneldan/TinyStories',
+            'scientific': 'scientific_papers',
+            'legal': 'pile-of-law',
+            'medical': 'pubmed_qa'
+        }
+        
+        logger.info(f"📚 DatasetManager initialized with tokenizer: {tokenizer_name}")
+    
+    def load_dataset_by_name(self, dataset_name: str, split: str = 'train', 
+                           streaming: bool = False, num_proc: int = 4) -> Dataset:
+        """Load a dataset by name with comprehensive error handling"""
         try:
-            if target_device is None:
-                target_device = tensors[0].device
+            if dataset_name not in self.available_datasets:
+                raise ValueError(f"Dataset '{dataset_name}' not available. Choose from: {list(self.available_datasets.keys())}")
             
-            aligned_tensors = [DeviceManager.ensure_tensor_device(t, target_device) for t in tensors]
-            return torch.cat(aligned_tensors, dim=dim)
-        except Exception as e:
-            logger.error(f"Safe concatenation failed: {e}")
-            # Return first tensor as fallback
-            return tensors[0] if tensors else torch.tensor([])
-
-
-class ComprehensiveRealDatasetLoader:
-    """Load multiple high-quality real datasets for robust SplatFlow training"""
-    
-    def __init__(self, tokenizer, seq_length: int = 1024, target_sequences: int = 10000):
-        self.tokenizer = tokenizer
-        self.seq_length = seq_length
-        self.target_sequences = target_sequences
-        self.all_texts = []
-        
-        self.min_tokens_full = max(256, seq_length // 4)
-        self.min_tokens_padded = max(128, seq_length // 8)
-        
-        logger.info(f"📚 Loading COMPREHENSIVE REAL DATASETS for SplatFlow training...")
-        logger.info(f"   Target: {target_sequences} sequences of {seq_length} tokens")
-        
-    def load_priority_real_datasets(self):
-        """Load datasets in priority order - highest quality first"""
-        
-        self._load_tier_1_datasets()
-        self._load_tier_2_datasets() 
-        self._load_tier_3_datasets()
-        self._load_tier_4_datasets()
-        
-        logger.info(f"   📊 Total texts collected: {len(self.all_texts)}")
-        
-        if len(self.all_texts) < 1000:
-            logger.info(f"   🔄 Adding enhanced fallback content...")
-            self._add_enhanced_fallback_content()
-        
-        return self.all_texts
-    
-    def _load_tier_1_datasets(self):
-        """TIER 1: Highest Quality"""
-        logger.info(f"🥇 TIER 1: Loading highest quality datasets...")
-        
-        # TinyStories - Highest quality narratives
-        self._safe_load_dataset(
-            dataset_name="roneneldan/TinyStories",
-            split="train",
-            text_field="text",
-            target_count=3000,
-            streaming=True,
-            description="High-quality children's stories"
-        )
-        
-        # SQuAD Context - Wikipedia paragraphs
-        self._safe_load_dataset(
-            dataset_name="squad",
-            split="train", 
-            text_field="context",
-            target_count=2000,
-            streaming=False,
-            description="High-quality Wikipedia paragraphs"
-        )
-        
-        # AG News - Professional articles
-        self._safe_load_dataset(
-            dataset_name="ag_news",
-            split="train",
-            text_field="text", 
-            target_count=1500,
-            streaming=False,
-            description="News articles"
-        )
-    
-    def _load_tier_2_datasets(self):
-        """TIER 2: High Quality, Large Scale"""
-        logger.info(f"🥈 TIER 2: Loading large-scale quality datasets...")
-        
-        # CNN/DailyMail
-        self._safe_load_dataset(
-            dataset_name="cnn_dailymail",
-            config="3.0.0",
-            split="train",
-            text_field="article",
-            target_count=2000,
-            streaming=True,
-            description="Professional news articles"
-        )
-        
-        # OpenWebText
-        self._safe_load_dataset(
-            dataset_name="openwebtext",
-            split="train",
-            text_field="text",
-            target_count=2500,
-            streaming=True,
-            description="Curated web content"
-        )
-    
-    def _load_tier_3_datasets(self):
-        """TIER 3: Diverse Content Sources"""
-        logger.info(f"🥉 TIER 3: Loading diverse content datasets...")
-        
-        # BookCorpus
-        self._safe_load_dataset(
-            dataset_name="bookcorpus",
-            split="train",
-            text_field="text",
-            target_count=2000,
-            streaming=True,
-            description="Literature excerpts"
-        )
-    
-    def _load_tier_4_datasets(self):
-        """TIER 4: Specialized Content"""
-        logger.info(f"🏅 TIER 4: Loading specialized datasets...")
-        
-        # Multi-News
-        self._safe_load_dataset(
-            dataset_name="multi_news",
-            split="train",
-            text_field="document",
-            target_count=800,
-            streaming=False,
-            description="Multi-document news"
-        )
-    
-    def _safe_load_dataset(self, dataset_name: str, split: str, text_field: str,
-                          target_count: int, streaming: bool = True,
-                          config: Optional[str] = None, description: str = "",
-                          special_processing: Optional[str] = None):
-        """Safely load a dataset with comprehensive error handling"""
-        
-        logger.info(f"   📖 Loading {dataset_name}...")
-        logger.info(f"      Description: {description}")
-        
-        texts_loaded = 0
-        
-        try:
-            if config:
-                dataset = load_dataset(dataset_name, config, split=split, streaming=streaming)
+            dataset_path = self.available_datasets[dataset_name]
+            logger.info(f"📖 Loading dataset: {dataset_name} ({dataset_path})")
+            
+            # Special handling for different dataset formats
+            if dataset_name == 'wikitext':
+                dataset = load_dataset(dataset_path, split=split, streaming=streaming)
+            elif dataset_name == 'c4':
+                dataset = load_dataset(dataset_path, 'en', split=split, streaming=streaming)
+            elif dataset_name == 'cnn_dailymail':
+                dataset = load_dataset('cnn_dailymail', '3.0.0', split=split, streaming=streaming)
             else:
-                dataset = load_dataset(dataset_name, split=split, streaming=streaming)
+                dataset = load_dataset(dataset_path, split=split, streaming=streaming)
             
-            count = 0
-            for item in dataset:
-                if count >= target_count:
-                    break
-                
-                try:
-                    text = item.get(text_field, "")
-                    
-                    if isinstance(text, list) and len(text) > 0:
-                        text = text[0] if len(text) == 1 else " | ".join([t for t in text if t and len(t.strip()) > 20])
-                    
-                    if isinstance(text, str) and len(text.strip()) > 100:
-                        cleaned_text = self._enhanced_clean_text(text)
-                        if len(cleaned_text) > 80:
-                            self.all_texts.append(cleaned_text)
-                            texts_loaded += 1
-                            count += 1
-                
-                except Exception:
-                    continue
-            
-            logger.info(f"      ✅ Loaded {texts_loaded} texts from {dataset_name}")
+            logger.info(f"✅ Dataset loaded successfully: {len(dataset) if hasattr(dataset, '__len__') else 'streaming'} samples")
+            return dataset
             
         except Exception as e:
-            logger.warning(f"      ❌ Failed to load {dataset_name}: {e}")
+            logger.error(f"❌ Failed to load dataset '{dataset_name}': {str(e)}")
+            # Fallback to a simple synthetic dataset
+            return self._create_synthetic_dataset()
     
-    def _enhanced_clean_text(self, text: str) -> str:
-        """Enhanced text cleaning for better quality"""
-        import re
+    def _create_synthetic_dataset(self, size: int = 1000) -> Dataset:
+        """Create a synthetic text dataset for testing"""
+        logger.info("🔧 Creating synthetic dataset as fallback")
         
-        try:
-            text = ' '.join(text.split())
-            text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
-            text = re.sub(r'\S*@\S*\s?', '', text)
-            
-            text = text.replace('==', '').replace('||', '')
-            text = text.replace('{{', '').replace('}}', '')
-            text = text.replace('[edit]', '').replace('[citation needed]', '')
-            text = text.replace('&nbsp;', ' ').replace('&amp;', '&')
-            text = text.replace('\n\n\n', '\n\n')
-            
-            text = re.sub(r'\s+([.!?])', r'\1', text)
-            text = re.sub(r'([.!?])\s*([A-Z])', r'\1 \2', text)
-            
-            if len(text) > 3000:
-                cutoff = text[:3000].rfind('.')
-                if cutoff > 1500:
-                    text = text[:cutoff + 1]
-                else:
-                    text = text[:3000]
-            
-            return text.strip()
-        except Exception as e:
-            logger.warning(f"Text cleaning failed: {e}")
-            return text.strip() if isinstance(text, str) else ""
-    
-    def _add_enhanced_fallback_content(self):
-        """Add enhanced fallback content if dataset loading is insufficient"""
-        
-        logger.info(f"   🔄 Adding enhanced fallback content...")
-        
-        base_stories = [
-            """The scientist carefully observed the chemical reaction as it progressed through distinct phases. 
-            First, the solution changed from clear to pale yellow, indicating initial compound formation. 
-            Next, small crystals began to precipitate, creating a cloudy appearance. 
-            Finally, the mixture settled into distinct layers with crystalline product visible at the bottom. 
-            This sequence demonstrated precise control needed in chemical synthesis.""",
-            
-            """Marcus learned programming by starting with simple concepts and gradually building complexity. 
-            He began with basic syntax and variable declarations, understanding fundamental building blocks. 
-            Then he moved on to control structures like loops and conditionals. 
-            Eventually, he mastered object-oriented principles and could design elegant architectures. 
-            The journey required consistent practice and continuous learning."""
+        synthetic_texts = []
+        templates = [
+            "The quick brown fox jumps over the lazy dog.",
+            "In a hole in the ground there lived a hobbit.",
+            "It was the best of times, it was the worst of times.",
+            "To be or not to be, that is the question.",
+            "All that glitters is not gold.",
+            "The answer to life, the universe, and everything is 42.",
+            "In the beginning was the Word, and the Word was with God.",
+            "Space: the final frontier. These are the voyages of the starship Enterprise."
         ]
         
-        expanded_content = []
+        for i in range(size):
+            base_text = templates[i % len(templates)]
+            # Add some variation
+            synthetic_texts.append(f"Sample {i}: {base_text} This is additional content for sequence variation.")
         
-        try:
-            for story_idx, base_story in enumerate(base_stories):
-                for variation in range(100):
-                    intro = f"Chapter {variation + 1}: "
-                    connection = " This sequence demonstrates systematic progression and careful observation. "
-                    conclusion = f"This represents example {variation + 1} in our comprehensive study."
-                    
-                    full_story = intro + base_story + connection + conclusion
-                    expanded_content.append(full_story)
-            
-            self.all_texts.extend(expanded_content)
-            logger.info(f"      ✅ Added {len(expanded_content)} enhanced fallback texts")
-        except Exception as e:
-            logger.warning(f"Failed to add fallback content: {e}")
-
-
-class EnhancedRealDataset(Dataset):
-    """Enhanced dataset using comprehensive real text sources"""
+        return Dataset.from_dict({'text': synthetic_texts})
     
-    def __init__(self, tokenizer, seq_length: int = 1024, target_sequences: int = 10000):
-        self.tokenizer = tokenizer
-        self.seq_length = seq_length
-        self.examples = []
+    def prepare_training_data(self, dataset: Dataset, seq_length: int = 1024, 
+                            batch_size: int = 2, num_samples: Optional[int] = None) -> torch.utils.data.DataLoader:
+        """Prepare dataset for training with tokenization and batching"""
         
-        self.min_tokens_full = max(256, seq_length // 4)
-        self.min_tokens_padded = max(128, seq_length // 8)
+        # Limit dataset size if specified
+        if num_samples and len(dataset) > num_samples:
+            dataset = dataset.select(range(num_samples))
         
-        logger.info(f"🏭 Creating ENHANCED production dataset with real sources...")
+        logger.info(f"🔧 Preparing training data: {len(dataset)} samples, seq_length={seq_length}")
         
-        loader = ComprehensiveRealDatasetLoader(tokenizer, seq_length, target_sequences)
-        all_texts = loader.load_priority_real_datasets()
-        
-        logger.info(f"   📊 Processing {len(all_texts)} source texts into sequences...")
-        
-        self.create_robust_sequences_from_texts(all_texts, target_sequences)
-        self.validate_sequences()
-        
-        logger.info(f"   ✅ Final enhanced dataset: {len(self.examples)} sequences ready")
-    
-    def create_robust_sequences_from_texts(self, texts: List[str], target_sequences: int):
-        """Create sequences with aggressive and robust approach"""
-        sequences_created = 0
-        tokenization_failures = 0
-        
-        logger.info(f"   🔧 Creating sequences with enhanced robust approach...")
-        
-        for text_idx, text in enumerate(texts):
-            if sequences_created >= target_sequences:
-                break
-            
-            try:
-                tokens = self.tokenizer.encode(
-                    text,
-                    add_special_tokens=True,
-                    max_length=self.seq_length * 4,
-                    truncation=True
-                )
-                
-                if len(tokens) >= self.min_tokens_full:
-                    stride = max(64, self.seq_length // 8)
-                    
-                    for start_idx in range(0, len(tokens) - self.min_tokens_full + 1, stride):
-                        if sequences_created >= target_sequences:
+        def tokenize_function(examples):
+            # Handle different text column names
+            text_key = 'text'
+            if 'text' not in examples:
+                # Try common alternatives
+                possible_keys = ['article', 'content', 'document', 'passage', 'story']
+                for key in possible_keys:
+                    if key in examples:
+                        text_key = key
+                        break
+                else:
+                    # If no text found, use first string column
+                    for key, value in examples.items():
+                        if isinstance(value[0], str):
+                            text_key = key
                             break
-                        
-                        end_idx = min(start_idx + self.seq_length, len(tokens))
-                        sequence = tokens[start_idx:end_idx]
-                        
-                        if len(sequence) < self.seq_length:
-                            padding = [self.tokenizer.eos_token_id] * (self.seq_length - len(sequence))
-                            sequence.extend(padding)
-                        
-                        self.examples.append(torch.tensor(sequence, dtype=torch.long))
-                        sequences_created += 1
-                
-                elif len(tokens) >= self.min_tokens_padded:
-                    padding = [self.tokenizer.eos_token_id] * (self.seq_length - len(tokens))
-                    padded_sequence = tokens + padding
-                    
-                    self.examples.append(torch.tensor(padded_sequence, dtype=torch.long))
-                    sequences_created += 1
-                
-                if sequences_created > 0 and sequences_created % 1000 == 0:
-                    logger.info(f"      Created {sequences_created}/{target_sequences} sequences...")
-                    
-            except Exception as e:
-                tokenization_failures += 1
-                if tokenization_failures <= 10:
-                    logger.warning(f"      ⚠️  Tokenization error on text {text_idx}: {e}")
-                continue
+            
+            # Tokenize the texts
+            tokenized = self.tokenizer(
+                examples[text_key],
+                truncation=True,
+                padding=True,
+                max_length=seq_length,
+                return_tensors='pt'
+            )
+            
+            # Prepare labels for language modeling (shifted input_ids)
+            tokenized['labels'] = tokenized['input_ids'].clone()
+            return tokenized
         
-        logger.info(f"   ✅ Sequence creation complete: {sequences_created} sequences")
+        # Apply tokenization
+        tokenized_dataset = dataset.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=dataset.column_names
+        )
+        
+        # Set format for PyTorch
+        tokenized_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+        
+        # Create DataLoader
+        dataloader = torch.utils.data.DataLoader(
+            tokenized_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=0,  # Set to 0 to avoid multiprocessing issues
+            pin_memory=torch.cuda.is_available()
+        )
+        
+        logger.info(f"✅ Training data prepared: {len(dataloader)} batches")
+        return dataloader
+
+
+class TensorUtils:
+    """Utility functions for tensor operations in SplatFlow"""
     
-    def validate_sequences(self):
-        """Enhanced validation with better error handling"""
-        logger.info(f"   🔍 Validating {len(self.examples)} sequences...")
-        
-        valid_sequences = []
-        issues_fixed = 0
-        
-        for i, sequence in enumerate(self.examples):
-            try:
-                if len(sequence) != self.seq_length:
-                    if len(sequence) < self.seq_length:
-                        padding = [self.tokenizer.eos_token_id] * (self.seq_length - len(sequence))
-                        sequence = torch.cat([sequence, torch.tensor(padding, dtype=torch.long)])
-                    else:
-                        sequence = sequence[:self.seq_length]
-                    issues_fixed += 1
-                
-                if torch.any(sequence < 0) or torch.any(sequence >= self.tokenizer.vocab_size):
-                    sequence = torch.clamp(sequence, 0, self.tokenizer.vocab_size - 1)
-                    issues_fixed += 1
-                
-                sequence = sequence.to(torch.long)
-                valid_sequences.append(sequence)
-                
-            except Exception as e:
-                logger.warning(f"      ⚠️  Validation error on sequence {i}: {e}")
-                continue
-        
-        self.examples = valid_sequences
-        
-        if issues_fixed > 0:
-            logger.info(f"   🔧 Fixed {issues_fixed} sequence issues")
-        
-        logger.info(f"   ✅ Validation complete: {len(self.examples)} valid sequences")
-        
-        # Safety check for empty dataset
-        if len(self.examples) == 0:
-            logger.warning("   ⚠️ No valid sequences created, adding emergency fallback")
-            self._create_emergency_sequences()
-    
-    def _create_emergency_sequences(self):
-        """Create emergency sequences if dataset is empty"""
+    @staticmethod
+    def safe_tensor_operation(operation, *args, fallback_value=None, **kwargs):
+        """Safely execute tensor operations with error handling"""
         try:
-            emergency_text = "This is a test sequence for emergency fallback."
-            tokens = self.tokenizer.encode(emergency_text, add_special_tokens=True)
-            
-            for i in range(10):  # Create 10 emergency sequences
-                sequence = tokens + [self.tokenizer.eos_token_id] * (self.seq_length - len(tokens))
-                sequence = sequence[:self.seq_length]  # Ensure correct length
-                self.examples.append(torch.tensor(sequence, dtype=torch.long))
-            
-            logger.info(f"   🚨 Created {len(self.examples)} emergency sequences")
+            return operation(*args, **kwargs)
         except Exception as e:
-            logger.error(f"Emergency sequence creation failed: {e}")
+            logger.warning(f"⚠️ Tensor operation failed: {str(e)}")
+            if fallback_value is not None:
+                return fallback_value
+            raise
     
-    def __len__(self):
-        return max(len(self.examples), 1)  # Ensure at least 1 to avoid division by zero
+    @staticmethod
+    def get_tensor_stats(tensor: torch.Tensor, name: str = "tensor") -> Dict[str, float]:
+        """Get comprehensive statistics for a tensor"""
+        with torch.no_grad():
+            return {
+                f'{name}_mean': tensor.mean().item(),
+                f'{name}_std': tensor.std().item(),
+                f'{name}_min': tensor.min().item(),
+                f'{name}_max': tensor.max().item(),
+                f'{name}_norm': tensor.norm().item(),
+                f'{name}_shape': str(tuple(tensor.shape))
+            }
     
-    def __getitem__(self, idx):
-        try:
-            if len(self.examples) == 0:
-                # Emergency fallback
-                emergency_sequence = torch.zeros(self.seq_length, dtype=torch.long)
-                return emergency_sequence
+    @staticmethod
+    def check_tensor_health(tensor: torch.Tensor, name: str = "tensor") -> Dict[str, bool]:
+        """Check if tensor contains problematic values"""
+        return {
+            f'{name}_has_nan': torch.isnan(tensor).any().item(),
+            f'{name}_has_inf': torch.isinf(tensor).any().item(),
+            f'{name}_all_finite': torch.isfinite(tensor).all().item(),
+            f'{name}_has_gradients': tensor.requires_grad and tensor.grad is not None
+        }
+    
+    @staticmethod
+    def normalize_tensor(tensor: torch.Tensor, dim: int = -1, eps: float = 1e-8) -> torch.Tensor:
+        """Safely normalize tensor along specified dimension"""
+        norm = tensor.norm(dim=dim, keepdim=True)
+        return tensor / (norm + eps)
+
+
+class ConfigurationManager:
+    """Configuration management for SplatFlow experiments"""
+    
+    @staticmethod
+    def create_default_config() -> Dict[str, Any]:
+        """Create default configuration for SplatFlow training"""
+        return {
+            # Model Architecture
+            'model_dim': 512,
+            'num_layers': 6,
+            'num_splats': 20,
+            'max_splats': 64,
+            'max_seq_len': 2048,
+            'vocab_size': 50257,  # GPT-2 vocab size
+            'dropout': 0.1,
             
-            # Safe indexing
-            safe_idx = idx % len(self.examples)
-            return self.examples[safe_idx]
-        except Exception as e:
-            logger.warning(f"Dataset getitem failed for idx {idx}: {e}")
-            return torch.zeros(self.seq_length, dtype=torch.long)
+            # Training Parameters
+            'epochs': 50,
+            'batch_size': 2,
+            'seq_length': 1024,
+            'target_sequences': 10000,
+            'learning_rate': 3e-4,
+            'weight_decay': 0.01,
+            'warmup_steps': 1000,
+            'use_progressive_training': True,
+            
+            # Evaluation Settings
+            'eval_interval': 5,
+            'eval_max_length': 50,
+            'eval_temperature': 0.8,
+            'eval_top_k': 50,
+            'save_interval': 10,
+            
+            # Dataset Configuration
+            'dataset_name': 'wikitext',
+            'dataset_streaming': False,
+            'num_workers': 4,
+            
+            # SplatFlow Specific
+            'trajectory_strength': 0.2,
+            'splat_radius': 2.0,
+            'adaptive_positioning': True,
+            'emergency_rescue_threshold': 0.3,
+            'health_check_interval': 5,
+            
+            # Logging and Monitoring
+            'log_level': 'INFO',
+            'log_interval': 100,
+            'save_checkpoint': True,
+            'checkpoint_dir': './checkpoints',
+            'experiment_name': 'splatflow_experiment'
+        }
+    
+    @staticmethod
+    def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and fix configuration parameters"""
+        validated_config = config.copy()
+        
+        # Ensure minimum values
+        validated_config['model_dim'] = max(64, validated_config.get('model_dim', 512))
+        validated_config['num_layers'] = max(1, validated_config.get('num_layers', 6))
+        validated_config['num_splats'] = max(4, validated_config.get('num_splats', 20))
+        validated_config['batch_size'] = max(1, validated_config.get('batch_size', 2))
+        validated_config['seq_length'] = max(64, validated_config.get('seq_length', 1024))
+        
+        # Ensure learning rate is reasonable
+        lr = validated_config.get('learning_rate', 3e-4)
+        if lr <= 0 or lr > 1.0:
+            validated_config['learning_rate'] = 3e-4
+            logger.warning(f"⚠️ Invalid learning rate {lr}, reset to 3e-4")
+        
+        # Ensure trajectory strength is in valid range
+        traj_strength = validated_config.get('trajectory_strength', 0.2)
+        validated_config['trajectory_strength'] = max(0.0, min(1.0, traj_strength))
+        
+        return validated_config
+
+
+# Utility functions for external access
+def get_device_manager() -> DeviceManager:
+    """Get a global DeviceManager instance"""
+    if not hasattr(get_device_manager, '_instance'):
+        get_device_manager._instance = DeviceManager()
+    return get_device_manager._instance
+
+def get_dataset_manager(tokenizer_name: str = 'gpt2') -> DatasetManager:
+    """Get a DatasetManager instance"""
+    return DatasetManager(tokenizer_name)
+
+def cleanup_memory():
+    """Global memory cleanup function"""
+    device_manager = get_device_manager()
+    device_manager.cleanup_memory()
+
+def get_gpu_memory_info() -> Dict[str, float]:
+    """Global GPU memory info function"""
+    device_manager = get_device_manager()
+    return device_manager.get_gpu_memory_info()
+
+# Export key functions and classes
+__all__ = [
+    'DeviceManager',
+    'DatasetManager', 
+    'TensorUtils',
+    'ConfigurationManager',
+    'get_device_manager',
+    'get_dataset_manager',
+    'cleanup_memory',
+    'get_gpu_memory_info'
+]

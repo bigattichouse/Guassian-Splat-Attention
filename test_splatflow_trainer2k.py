@@ -1,1092 +1,434 @@
 #!/usr/bin/env python3
 """
-FIXED SplatFlow Training System - Stability Enhanced
-Addresses birth system overwhelm, layer health collapse, and loss tracking failures.
-Production-ready with intelligent birth control and progressive layer management.
+FIXED: Enhanced SplatFlow Trainer 2K - Phase 2 Integration
+Complete testing and training system with Phase 2 O(n*k) optimizations.
+Includes stability enhancements, constellation templates, splat specialization, and selective processing.
+
+CRITICAL FIXES:
+- Resolves dropout parameter conflicts in configuration creation
+- Proper parameter validation and cleaning
+- Enhanced error handling and recovery
 """
 
-import os
-import sys
-import time
 import torch
-import logging
+import torch.nn as nn
+import numpy as np
 import json
 import argparse
-import random
-import numpy as np
+import time
+import os
+import sys
+import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
-from contextlib import nullcontext
 from collections import deque, defaultdict
+from typing import Dict, List, Optional, Any
+
+# Add the parent directory to Python path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from splatflow import (
+    SplatFlowTrainingOrchestrator,
+    create_default_config,
+    create_onk_enhanced_config,
+    get_predefined_configurations,
+    create_phase2_config,
+    get_phase2_status,
+    run_phase2_tests,
+    PHASE_2_FEATURES,
+    setup_environment,
+    cleanup_memory,
+    get_gpu_memory_info,
+    validate_config
+)
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-# Import SplatFlow components
-try:
-    from splatflow import (
-        SplatFlowTrainingOrchestrator,
-        create_default_config,
-        setup_environment,
-        cleanup_memory,
-        get_gpu_memory_info,
-        get_quick_model_stats
-    )
-    SPLATFLOW_AVAILABLE = True
-    print("✅ SplatFlow imports successful")
-except ImportError as e:
-    print(f"❌ Failed to import SplatFlow: {e}")
-    sys.exit(1)
 
-
-class AdaptiveDeepLayerBirthController:
-    """Intelligent birth control system to prevent request overflow"""
+class Phase2TrainingMonitor:
+    """Enhanced training monitor with Phase 2 feature tracking"""
     
-    def __init__(self, layer_idx: int, max_pending: int = 50, processing_rate: float = 0.3):
-        self.layer_idx = layer_idx
-        self.max_pending = max_pending
-        self.processing_rate = processing_rate
-        self.request_queue = deque(maxlen=max_pending)
-        self.rejected_count = 0
-        self.processed_count = 0
-        
-        # Layer-specific birth control parameters
-        if layer_idx == 0:
-            self.urgency_multiplier = 1.0
-            self.max_cluster_size = 150
-            self.birth_frequency = 1.0
-        elif layer_idx == 1:
-            self.urgency_multiplier = 0.7
-            self.max_cluster_size = 100
-            self.birth_frequency = 0.7
-        else:  # layer_idx >= 2
-            self.urgency_multiplier = 0.5
-            self.max_cluster_size = 75
-            self.birth_frequency = 0.5
-        
-        logger.info(f"🎯 Birth Controller Layer {layer_idx}: max_pending={max_pending}, "
-                   f"max_cluster={self.max_cluster_size}")
-    
-    def request_birth(self, position: torch.Tensor, reason: str, urgency: float = 1.0,
-                     parent_splat_id: Optional[int] = None, token_cluster_size: int = 0) -> bool:
-        """Request birth with intelligent filtering"""
-        
-        # Quick rejection filters
-        if len(self.request_queue) >= self.max_pending:
-            self.rejected_count += 1
-            if self.rejected_count % 100 == 1:  # Log every 100th rejection
-                logger.debug(f"Layer {self.layer_idx}: Birth queue full, rejected {self.rejected_count} total")
-            return False
-        
-        # Layer-specific cluster size limiting
-        if token_cluster_size > self.max_cluster_size:
-            token_cluster_size = self.max_cluster_size
-        
-        # Minimum cluster size filtering
-        if token_cluster_size < 8:
-            self.rejected_count += 1
-            return False
-        
-        # Random birth frequency control (prevents all layers birthing simultaneously)
-        if random.random() > self.birth_frequency:
-            return False
-        
-        # Adjust urgency by layer depth
-        adjusted_urgency = urgency * self.urgency_multiplier
-        
-        # Add to queue with layer-aware priorities
-        birth_request = {
-            'position': position.clone().detach(),
-            'reason': reason,
-            'urgency': adjusted_urgency,
-            'cluster_size': token_cluster_size,
-            'parent_splat_id': parent_splat_id,
-            'timestamp': time.time(),
-            'layer_idx': self.layer_idx
-        }
-        
-        self.request_queue.append(birth_request)
-        return True
-    
-    def process_queue(self, current_splats: List, epoch: int, max_births_this_call: int = 1) -> List[Dict]:
-        """Process birth queue with intelligent prioritization"""
-        
-        if not self.request_queue:
-            return []
-        
-        # Convert queue to list for sorting
-        requests_list = list(self.request_queue)
-        
-        # Sort by urgency and cluster size
-        requests_list.sort(key=lambda x: (x['urgency'], x['cluster_size']), reverse=True)
-        
-        processed_requests = []
-        current_splat_positions = [s.position for s in current_splats] if current_splats else []
-        
-        for request in requests_list[:max_births_this_call * 2]:  # Consider 2x, select best
-            if len(processed_requests) >= max_births_this_call:
-                break
-            
-            # Validate birth is still needed
-            if self._validate_birth_necessity(request, current_splat_positions, epoch):
-                processed_requests.append(request)
-                self.processed_count += 1
-        
-        # Remove processed requests from queue
-        for processed in processed_requests:
-            try:
-                self.request_queue.remove(processed)
-            except ValueError:
-                pass  # Already removed
-        
-        # Age-based queue cleanup (remove old requests)
-        current_time = time.time()
-        expired_requests = [r for r in self.request_queue if current_time - r['timestamp'] > 60.0]
-        for expired in expired_requests:
-            try:
-                self.request_queue.remove(expired)
-            except ValueError:
-                pass
-        
-        if processed_requests:
-            logger.debug(f"Layer {self.layer_idx}: Processed {len(processed_requests)} births, "
-                        f"queue size: {len(self.request_queue)}")
-        
-        return processed_requests
-    
-    def _validate_birth_necessity(self, request: Dict, current_positions: List, epoch: int) -> bool:
-        """Validate if birth is still necessary"""
-        
-        if not current_positions:
-            return True
-        
-        # Check if position is too close to existing splats
-        request_pos = request['position']
-        min_distance = 6.0  # Minimum distance between splats
-        
-        for existing_pos in current_positions:
-            try:
-                distance = torch.norm(request_pos - existing_pos).item()
-                if distance < min_distance:
-                    return False  # Too close to existing splat
-            except Exception:
-                continue
-        
-        # Additional validation for later epochs (be more selective)
-        if epoch > 10:
-            if request['cluster_size'] < 15:  # Higher standards for mature training
-                return False
-            if request['urgency'] < 0.3:  # Only high-urgency requests
-                return False
-        
-        return True
-    
-    def get_statistics(self) -> Dict:
-        """Get birth controller statistics"""
-        return {
-            'layer_idx': self.layer_idx,
-            'queue_size': len(self.request_queue),
-            'max_pending': self.max_pending,
-            'rejected_count': self.rejected_count,
-            'processed_count': self.processed_count,
-            'birth_frequency': self.birth_frequency,
-            'max_cluster_size': self.max_cluster_size,
-            'urgency_multiplier': self.urgency_multiplier
-        }
-
-
-class LayerAwareHealthRecovery:
-    """Layer-aware health assessment and recovery system"""
-    
-    def __init__(self, layer_idx: int, model_dim: int):
-        self.layer_idx = layer_idx
-        self.model_dim = model_dim
-        self.recovery_mode = False
-        self.recovery_count = 0
-        self.health_history = deque(maxlen=10)
-        
-        # Layer-specific health thresholds
-        if layer_idx == 0:
-            self.critical_threshold = 0.65    # Layer 0 needs 65%+ healthy
-            self.weak_threshold = 0.80
-            self.recovery_strength = 0.15     # Moderate recovery
-        elif layer_idx == 1:
-            self.critical_threshold = 0.45    # Layer 1 needs 45%+ healthy
-            self.weak_threshold = 0.65
-            self.recovery_strength = 0.10     # Conservative recovery
-        else:  # layer_idx >= 2
-            self.critical_threshold = 0.35    # Deep layers need 35%+ healthy
-            self.weak_threshold = 0.55
-            self.recovery_strength = 0.08     # Very conservative recovery
-        
-        logger.info(f"🏥 Health Recovery Layer {layer_idx}: critical={self.critical_threshold:.1%}, "
-                   f"weak={self.weak_threshold:.1%}")
-    
-    def assess_layer_health(self, splats: List, epoch: int) -> Tuple[str, float, int]:
-        """Assess layer health with progressive criteria"""
-        
-        if not splats:
-            return "CRITICAL", 0.0, 0
-        
-        # Count healthy splats with epoch-aware criteria
-        healthy_count = 0
-        for splat in splats:
-            try:
-                if self._is_splat_healthy(splat, epoch):
-                    healthy_count += 1
-            except Exception as e:
-                logger.warning(f"Health check failed for splat: {e}")
-                continue
-        
-        health_ratio = healthy_count / len(splats)
-        self.health_history.append(health_ratio)
-        
-        # Determine health status
-        if health_ratio < self.critical_threshold:
-            status = "CRITICAL"
-            self.recovery_mode = True
-        elif health_ratio < self.weak_threshold:
-            status = "WEAK"
-            self.recovery_mode = health_ratio < (self.critical_threshold + 0.1)
-        else:
-            status = "HEALTHY"
-            self.recovery_mode = False
-        
-        return status, health_ratio, healthy_count
-    
-    def _is_splat_healthy(self, splat, epoch: int) -> bool:
-        """Layer-aware splat health criteria"""
-        
-        try:
-            # Get basic health metrics
-            if hasattr(splat, 'trajectory_influence_history') and splat.trajectory_influence_history:
-                recent_influence = np.mean(splat.trajectory_influence_history[-8:])
-            else:
-                recent_influence = 0.0
-            
-            usefulness = getattr(splat, 'usefulness', 0.0)
-            velocity_magnitude = torch.norm(getattr(splat, 'velocity', torch.zeros(1))).item()
-            
-            # Progressive thresholds based on training stage
-            if epoch < 5:  # Early training - very lenient
-                influence_threshold = 1e-8
-                usefulness_threshold = 0.05
-                max_velocity = 8.0
-            elif epoch < 15:  # Mid training - moderate
-                influence_threshold = 1e-7 * (1 + self.layer_idx)  # Stricter for deeper layers
-                usefulness_threshold = 0.1 * (1 + self.layer_idx * 0.5)
-                max_velocity = 6.0
-            else:  # Late training - strict
-                influence_threshold = 1e-6 * (1 + self.layer_idx)
-                usefulness_threshold = 0.15 * (1 + self.layer_idx * 0.5)
-                max_velocity = 4.0
-            
-            # Health checks
-            influence_healthy = recent_influence > influence_threshold
-            usefulness_healthy = usefulness > usefulness_threshold
-            velocity_stable = velocity_magnitude < max_velocity
-            
-            # All criteria must pass
-            return influence_healthy and usefulness_healthy and velocity_stable
-            
-        except Exception as e:
-            logger.warning(f"Splat health check failed: {e}")
-            return False  # Default to unhealthy if check fails
-    
-    def apply_recovery_if_needed(self, splats: List, token_embeddings: torch.Tensor, epoch: int) -> int:
-        """Apply layer-aware recovery if needed"""
-        
-        if not self.recovery_mode or not splats:
-            return 0
-        
-        device = token_embeddings.device
-        batch_size, seq_len, embed_dim = token_embeddings.shape
-        
-        if seq_len == 0:
-            return 0
-        
-        # Layer-aware recovery strategy
-        if self.layer_idx == 0:
-            return self._surface_layer_recovery(splats, token_embeddings, epoch, device)
-        else:
-            return self._deep_layer_recovery(splats, token_embeddings, epoch, device)
-    
-    def _surface_layer_recovery(self, splats: List, token_embeddings: torch.Tensor, 
-                               epoch: int, device: torch.device) -> int:
-        """Recovery strategy for layer 0 (more aggressive)"""
-        
-        recovered_count = 0
-        seq_len = token_embeddings.size(1)
-        
-        # Sample more tokens for surface layer
-        sample_size = min(64, seq_len)
-        sample_indices = torch.randperm(seq_len, device=device)[:sample_size]
-        sampled_tokens = token_embeddings[0][sample_indices]
-        
-        for splat in splats:
-            try:
-                if not self._is_splat_healthy(splat, epoch):
-                    # Find nearest tokens cluster
-                    distances = torch.norm(sampled_tokens - splat.position.unsqueeze(0), dim=-1)
-                    k_nearest = min(8, len(distances))
-                    _, nearest_indices = torch.topk(distances, k_nearest, largest=False)
-                    nearest_tokens = sampled_tokens[nearest_indices]
-                    
-                    # Move toward centroid of nearest tokens
-                    target_position = nearest_tokens.mean(dim=0)
-                    direction = target_position - splat.position
-                    
-                    with torch.no_grad():
-                        # Recovery movement
-                        splat.position.data += self.recovery_strength * direction
-                        
-                        # Reset parameters
-                        splat.usefulness = max(splat.usefulness, 1.5)
-                        splat.velocity *= 0.5  # Dampen velocity
-                        
-                        # Apply bounds
-                        bounds = 12.0
-                        splat.position.data = torch.clamp(splat.position.data, -bounds, bounds)
-                    
-                    recovered_count += 1
-                    
-            except Exception as e:
-                logger.warning(f"Surface recovery failed for splat: {e}")
-                continue
-        
-        if recovered_count > 0:
-            self.recovery_count += recovered_count
-            logger.info(f"🏥 Layer {self.layer_idx}: Surface recovery applied to {recovered_count} splats")
-        
-        return recovered_count
-    
-    def _deep_layer_recovery(self, splats: List, token_embeddings: torch.Tensor,
-                            epoch: int, device: torch.device) -> int:
-        """Recovery strategy for deep layers (more conservative)"""
-        
-        recovered_count = 0
-        seq_len = token_embeddings.size(1)
-        
-        # Sample fewer tokens for deep layers
-        sample_size = min(32, seq_len)
-        sample_indices = torch.randperm(seq_len, device=device)[:sample_size]
-        sampled_tokens = token_embeddings[0][sample_indices]
-        
-        for splat in splats:
-            try:
-                if not self._is_splat_healthy(splat, epoch):
-                    # More conservative recovery for deep layers
-                    distances = torch.norm(sampled_tokens - splat.position.unsqueeze(0), dim=-1)
-                    closest_idx = torch.argmin(distances)
-                    closest_token = sampled_tokens[closest_idx]
-                    
-                    direction = closest_token - splat.position
-                    
-                    with torch.no_grad():
-                        # Very conservative recovery movement
-                        recovery_strength = self.recovery_strength * (0.5 ** self.layer_idx)
-                        splat.position.data += recovery_strength * direction
-                        
-                        # Conservative parameter reset
-                        splat.usefulness = max(splat.usefulness, 1.0 + self.layer_idx * 0.3)
-                        splat.velocity *= 0.3  # Strong velocity damping for deep layers
-                        
-                        # Tighter bounds for deep layers
-                        bounds = 10.0 - self.layer_idx
-                        splat.position.data = torch.clamp(splat.position.data, -bounds, bounds)
-                    
-                    recovered_count += 1
-                    
-            except Exception as e:
-                logger.warning(f"Deep recovery failed for splat: {e}")
-                continue
-        
-        if recovered_count > 0:
-            self.recovery_count += recovered_count
-            logger.info(f"🏥 Layer {self.layer_idx}: Deep recovery applied to {recovered_count} splats")
-        
-        return recovered_count
-    
-    def get_statistics(self) -> Dict:
-        """Get health recovery statistics"""
-        avg_health = np.mean(self.health_history) if self.health_history else 0.0
-        
-        return {
-            'layer_idx': self.layer_idx,
-            'recovery_mode': self.recovery_mode,
-            'recovery_count': self.recovery_count,
-            'avg_health_last_10': avg_health,
-            'critical_threshold': self.critical_threshold,
-            'weak_threshold': self.weak_threshold,
-            'recovery_strength': self.recovery_strength
-        }
-
-
-class ProgressiveTrainingStabilizer:
-    """Intelligent progressive layer activation with health-based gating"""
-    
-    def __init__(self, model, warmup_epochs: int = 3):
-        self.model = model
-        self.warmup_epochs = warmup_epochs
-        self.num_layers = len(model.layers) if hasattr(model, 'layers') and model.layers else 1
-        self.current_active_layers = 1  # Always start with just layer 0
-        self.activation_history = []
-        self.health_requirements_met = [False] * self.num_layers
-        
-        # Health requirements for layer activation
-        self.health_requirements = [0.65, 0.50, 0.40]  # Requirements for layers 0, 1, 2+
-        
-        logger.info(f"🎚️  Progressive Stabilizer: {self.num_layers} layers, "
-                   f"health requirements: {self.health_requirements}")
-    
-    def update_progressive_activation(self, epoch: int, layer_health_stats: List[Dict]) -> int:
-        """Update layer activation based on health and training progress"""
-        
-        # Always keep layer 0 active
-        target_active_layers = 1
-        
-        # Check if we can activate more layers
-        for layer_idx in range(min(len(layer_health_stats), self.num_layers)):
-            
-            if layer_idx == 0:
-                continue  # Layer 0 always active
-            
-            # Requirements for activating this layer:
-            # 1. Previous layer is healthy enough
-            # 2. Sufficient warmup epochs have passed
-            # 3. We haven't exceeded maximum safe progression rate
-            
-            prev_layer_health = layer_health_stats[layer_idx - 1]['health_ratio'] if layer_idx > 0 else 1.0
-            required_health = self.health_requirements[min(layer_idx, len(self.health_requirements) - 1)]
-            
-            # Progressive epoch requirements
-            required_epochs = self.warmup_epochs + layer_idx * 5  # More warmup for deeper layers
-            
-            can_activate = (
-                prev_layer_health >= required_health and
-                epoch >= required_epochs and
-                layer_idx <= target_active_layers  # Don't skip layers
-            )
-            
-            if can_activate:
-                target_active_layers = layer_idx + 1
-                self.health_requirements_met[layer_idx] = True
-            else:
-                break  # Don't activate deeper layers if this one can't be activated
-        
-        # Conservative progression: don't activate too many layers at once
-        max_increase = 1
-        if target_active_layers > self.current_active_layers + max_increase:
-            target_active_layers = self.current_active_layers + max_increase
-        
-        # Apply activation changes
-        if target_active_layers != self.current_active_layers:
-            self._apply_layer_activation(target_active_layers, epoch)
-            
-            self.activation_history.append({
-                'epoch': epoch,
-                'active_layers': target_active_layers,
-                'layer_healths': [stats['health_ratio'] for stats in layer_health_stats]
-            })
-        
-        return target_active_layers
-    
-    def _apply_layer_activation(self, target_layers: int, epoch: int):
-        """Apply layer activation changes"""
-        
-        logger.info(f"🎚️  Progressive activation: {self.current_active_layers} → {target_layers} layers "
-                   f"at epoch {epoch}")
-        
-        for layer_idx, layer in enumerate(self.model.layers):
-            if layer_idx < target_layers:
-                # Activate layer
-                for param in layer.parameters():
-                    param.requires_grad = True
-                    
-                if hasattr(layer, 'attention'):
-                    layer.attention.adaptation_enabled = True
-                    
-                    # Apply conservative learning rates for newly activated deep layers
-                    if layer_idx > 0 and layer_idx >= self.current_active_layers:
-                        self._apply_conservative_deep_layer_settings(layer, layer_idx)
-                
-                logger.info(f"   ✅ Layer {layer_idx}: ACTIVATED")
-            else:
-                # Deactivate layer
-                for param in layer.parameters():
-                    param.requires_grad = False
-                    
-                if hasattr(layer, 'attention'):
-                    layer.attention.adaptation_enabled = False
-                
-                logger.info(f"   ❄️  Layer {layer_idx}: FROZEN")
-        
-        self.current_active_layers = target_layers
-    
-    def _apply_conservative_deep_layer_settings(self, layer, layer_idx: int):
-        """Apply conservative settings to newly activated deep layers"""
-        
-        try:
-            if hasattr(layer, 'attention') and hasattr(layer.attention, 'splats'):
-                for splat in layer.attention.splats:
-                    # Reduce learning rates for deep layers
-                    if hasattr(splat, 'trajectory_learning_rate'):
-                        splat.trajectory_learning_rate *= (0.7 ** layer_idx)  # Exponential reduction
-                    
-                    # More conservative momentum for deep layers
-                    if hasattr(splat, 'trajectory_momentum'):
-                        splat.trajectory_momentum = min(0.8, splat.trajectory_momentum * 0.9)
-                    
-                    # Reset usefulness to safe values
-                    splat.usefulness = 2.0 + layer_idx * 0.5
-                    
-                    # Clear history for fresh start
-                    splat.trajectory_influence_history.clear()
-                    splat.activation_history.clear()
-            
-            logger.info(f"   🎛️  Applied conservative settings to layer {layer_idx}")
-            
-        except Exception as e:
-            logger.warning(f"Failed to apply conservative settings to layer {layer_idx}: {e}")
-    
-    def get_activation_status(self) -> Dict:
-        """Get current activation status"""
-        return {
-            'current_active_layers': self.current_active_layers,
-            'total_layers': self.num_layers,
-            'activation_ratio': self.current_active_layers / max(self.num_layers, 1),
-            'health_requirements_met': self.health_requirements_met[:self.num_layers],
-            'activation_history': self.activation_history[-5:]  # Last 5 activations
-        }
-
-
-class RobustTrainingLoop:
-    """Robust training loop with comprehensive error handling and loss tracking"""
-    
-    def __init__(self, trainer, config):
-        self.trainer = trainer
-        self.config = config
-        
-        # Loss tracking
+    def __init__(self):
         self.loss_history = deque(maxlen=1000)
+        self.epoch_losses = []
+        self.best_loss = float('inf')
         self.valid_step_count = 0
         self.failed_step_count = 0
-        self.epoch_losses = []
-        
-        # Training state
-        self.best_loss = float('inf')
-        self.loss_smoothing_window = 20
-        self.gradient_accumulation_steps = config.get('gradient_accumulation_steps', 1)
-        
-        # Error recovery
         self.consecutive_failures = 0
-        self.max_consecutive_failures = 10
         self.recovery_attempts = 0
         
-        logger.info(f"🔄 Robust Training Loop initialized: grad_accum={self.gradient_accumulation_steps}")
-    
-    def safe_training_step(self, batch: torch.Tensor, epoch: int, batch_idx: int, 
-                          scaler=None, autocast_context=None) -> Optional[float]:
-        """Execute a single training step with comprehensive error handling"""
+        # Phase 2 specific tracking
+        self.specialization_transitions = defaultdict(int)
+        self.constellation_adaptations = 0
+        self.selective_processing_efficiency = []
+        self.onk_computation_savings = []
+        self.cache_hit_rates = []
         
-        try:
-            # Input validation
-            if batch is None or batch.numel() == 0:
-                logger.warning(f"Invalid batch at epoch {epoch}, batch {batch_idx}")
-                return None
-            
-            batch = batch.to(self.trainer.device)
-            
-            # Sequence length validation and fixing
-            max_model_length = getattr(self.trainer.model, 'max_seq_len', 2048)
-            if batch.size(1) > max_model_length:
-                logger.warning(f"Truncating batch from {batch.size(1)} to {max_model_length} tokens")
-                batch = batch[:, :max_model_length]
-            
-            if batch.size(1) < 2:
-                logger.warning(f"Batch too short ({batch.size(1)} tokens) at epoch {epoch}, batch {batch_idx}")
-                return None
-            
-            # Prepare input and targets
-            input_ids = batch[:, :-1]
-            targets = batch[:, 1:]
-            
-            # Handle gradient accumulation
-            if batch_idx % self.gradient_accumulation_steps == 0:
-                self.trainer.optimizer.zero_grad()
-            
-            # Forward pass with mixed precision support
-            if scaler and autocast_context:
-                with autocast_context:
-                    loss = self._compute_forward_pass(input_ids, targets, epoch, batch_idx)
-                    if loss is None:
-                        return None
-                    
-                    # Scale loss for gradient accumulation
-                    loss = loss / self.gradient_accumulation_steps
-                
-                # Backward pass with gradient scaling
-                scaler.scale(loss).backward()
-                
-                # Update on accumulation boundary
-                if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
-                    # Unscale gradients and check for infs/nans
-                    scaler.unscale_(self.trainer.optimizer)
-                    
-                    # Gradient clipping
-                    grad_norm = torch.nn.utils.clip_grad_norm_(self.trainer.model.parameters(), 1.0)
-                    
-                    # Check for problematic gradients
-                    if torch.isnan(grad_norm) or torch.isinf(grad_norm):
-                        logger.warning(f"Invalid gradient norm at epoch {epoch}, batch {batch_idx}")
-                        scaler.update()  # Update scaler but skip optimizer step
-                        return None
-                    
-                    # Optimizer step
-                    scaler.step(self.trainer.optimizer)
-                    scaler.update()
-                    self.trainer.scheduler.step()
-            else:
-                # Standard precision
-                loss = self._compute_forward_pass(input_ids, targets, epoch, batch_idx)
-                if loss is None:
-                    return None
-                
-                loss = loss / self.gradient_accumulation_steps
-                loss.backward()
-                
-                if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(self.trainer.model.parameters(), 1.0)
-                    
-                    if torch.isnan(grad_norm) or torch.isinf(grad_norm):
-                        logger.warning(f"Invalid gradient norm at epoch {epoch}, batch {batch_idx}")
-                        self.trainer.optimizer.zero_grad()
-                        return None
-                    
-                    self.trainer.optimizer.step()
-                    self.trainer.scheduler.step()
-            
-            # Record successful step
-            loss_value = loss.item() * self.gradient_accumulation_steps  # Unscale for logging
-            self._record_successful_step(loss_value, epoch, batch_idx)
-            
-            return loss_value
-            
-        except RuntimeError as e:
-            return self._handle_runtime_error(e, epoch, batch_idx)
-        except Exception as e:
-            return self._handle_general_error(e, epoch, batch_idx)
-    
-    def _compute_forward_pass(self, input_ids: torch.Tensor, targets: torch.Tensor, 
-                             epoch: int, batch_idx: int) -> Optional[torch.Tensor]:
-        """Compute forward pass with validation"""
+        # Feature availability tracking
+        self.phase2_status = get_phase2_status()
         
-        try:
-            # Forward pass
-            logits = self.trainer.model(input_ids)
-            
-            # Validate logits
-            if logits is None:
-                logger.warning(f"Model returned None at epoch {epoch}, batch {batch_idx}")
-                return None
-            
-            if torch.isnan(logits).any():
-                logger.warning(f"NaN in logits at epoch {epoch}, batch {batch_idx}")
-                return None
-            
-            if torch.isinf(logits).any():
-                logger.warning(f"Inf in logits at epoch {epoch}, batch {batch_idx}")
-                return None
-            
-            # Compute loss
-            loss = torch.nn.functional.cross_entropy(
-                logits.reshape(-1, logits.size(-1)),
-                targets.reshape(-1),
-                ignore_index=getattr(self.trainer.tokenizer, 'pad_token_id', 0)
-            )
-            
-            # Validate loss
-            if torch.isnan(loss) or torch.isinf(loss):
-                logger.warning(f"Invalid loss at epoch {epoch}, batch {batch_idx}: {loss}")
-                return None
-            
-            # Sanity check loss value
-            if loss.item() > 50.0:  # Extremely high loss suggests numerical issues
-                logger.warning(f"Extremely high loss ({loss.item():.2f}) at epoch {epoch}, batch {batch_idx}")
-                return None
-            
-            return loss
-            
-        except Exception as e:
-            logger.warning(f"Forward pass failed at epoch {epoch}, batch {batch_idx}: {e}")
-            return None
-    
-    def _record_successful_step(self, loss_value: float, epoch: int, batch_idx: int):
-        """Record a successful training step"""
-        
-        self.loss_history.append(loss_value)
-        self.valid_step_count += 1
-        self.consecutive_failures = 0
-        
-        # Update best loss
-        if loss_value < self.best_loss:
-            self.best_loss = loss_value
-        
-        # Log periodically
-        if self.valid_step_count % 50 == 0:
-            recent_losses = list(self.loss_history)[-self.loss_smoothing_window:]
-            avg_recent_loss = sum(recent_losses) / len(recent_losses)
-            logger.debug(f"Step {self.valid_step_count}: loss={loss_value:.4f}, "
-                        f"avg_recent={avg_recent_loss:.4f}, best={self.best_loss:.4f}")
-    
-    def _handle_runtime_error(self, error: RuntimeError, epoch: int, batch_idx: int) -> Optional[float]:
-        """Handle runtime errors (OOM, CUDA assertions, etc.)"""
-        
-        error_str = str(error)
-        
-        if "out of memory" in error_str:
-            logger.warning(f"OOM at epoch {epoch}, batch {batch_idx}, clearing cache and skipping")
-            torch.cuda.empty_cache()
+    def record_step(self, loss: float, step_info: Optional[Dict] = None):
+        """Record training step with Phase 2 information"""
+        if torch.isnan(torch.tensor(loss)) or torch.isinf(torch.tensor(loss)):
             self.failed_step_count += 1
-            return None
-            
-        elif "device-side assert" in error_str:
-            logger.warning(f"CUDA assertion at epoch {epoch}, batch {batch_idx}, skipping")
-            torch.cuda.empty_cache()
-            self.failed_step_count += 1
-            return None
-            
-        elif "CUDA error" in error_str:
-            logger.warning(f"CUDA error at epoch {epoch}, batch {batch_idx}: {error}")
-            torch.cuda.empty_cache()
-            self.failed_step_count += 1
-            return None
+            self.consecutive_failures += 1
+            return False
         else:
-            # Re-raise other runtime errors
-            logger.error(f"Unhandled runtime error at epoch {epoch}, batch {batch_idx}: {error}")
-            raise
-    
-    def _handle_general_error(self, error: Exception, epoch: int, batch_idx: int) -> Optional[float]:
-        """Handle general errors"""
-        
-        logger.error(f"Training step failed at epoch {epoch}, batch {batch_idx}: {error}")
-        self.failed_step_count += 1
-        self.consecutive_failures += 1
-        
-        # Emergency recovery if too many consecutive failures
-        if self.consecutive_failures >= self.max_consecutive_failures:
-            logger.error(f"Too many consecutive failures ({self.consecutive_failures}), "
-                        f"attempting emergency recovery")
-            self._emergency_recovery()
-        
-        return None
-    
-    def _emergency_recovery(self):
-        """Emergency recovery procedures"""
-        
-        self.recovery_attempts += 1
-        logger.info(f"🚨 Emergency recovery attempt #{self.recovery_attempts}")
-        
-        try:
-            # Clear CUDA cache
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-            
-            # Reset optimizer state
-            self.trainer.optimizer.zero_grad()
-            
-            # Reset consecutive failure counter
+            self.loss_history.append(loss)
+            if loss < self.best_loss:
+                self.best_loss = loss
+            self.valid_step_count += 1
             self.consecutive_failures = 0
             
-            logger.info("✅ Emergency recovery completed")
+            # Record Phase 2 information
+            if step_info:
+                self._record_phase2_info(step_info)
             
+            return True
+    
+    def _record_phase2_info(self, step_info: Dict):
+        """Record Phase 2 specific information"""
+        try:
+            # Track specialization transitions
+            if 'specialization_changes' in step_info:
+                for role_change in step_info['specialization_changes']:
+                    self.specialization_transitions[role_change] += 1
+            
+            # Track constellation adaptations
+            if 'constellation_adaptations' in step_info:
+                self.constellation_adaptations += step_info['constellation_adaptations']
+            
+            # Track selective processing efficiency
+            if 'selective_processing_ratio' in step_info:
+                self.selective_processing_efficiency.append(step_info['selective_processing_ratio'])
+            
+            # Track computation savings
+            if 'onk_computation_savings' in step_info:
+                self.onk_computation_savings.append(step_info['onk_computation_savings'])
+            
+            # Track cache performance
+            if 'cache_hit_rate' in step_info:
+                self.cache_hit_rates.append(step_info['cache_hit_rate'])
+                
         except Exception as e:
-            logger.error(f"Emergency recovery failed: {e}")
+            logger.warning(f"Failed to record Phase 2 info: {e}")
     
     def get_epoch_summary(self, epoch: int) -> Dict:
-        """Get summary statistics for the epoch"""
+        """Get comprehensive epoch summary including Phase 2 metrics"""
         
-        if len(self.loss_history) > 0:
-            recent_losses = list(self.loss_history)[-50:]  # Last 50 steps
-            avg_loss = sum(recent_losses) / len(recent_losses)
-            
-            # Calculate loss trend
-            if len(recent_losses) >= 20:
-                first_half = recent_losses[:len(recent_losses)//2]
-                second_half = recent_losses[len(recent_losses)//2:]
-                trend = (sum(second_half) / len(second_half)) - (sum(first_half) / len(first_half))
-            else:
-                trend = 0.0
-            
-            self.epoch_losses.append(avg_loss)
-        else:
-            avg_loss = float('inf')
-            trend = 0.0
-        
-        return {
+        base_summary = {
             'epoch': epoch,
-            'avg_loss': avg_loss,
+            'avg_loss': np.mean(list(self.loss_history)[-50:]) if self.loss_history else float('inf'),
             'best_loss': self.best_loss,
             'valid_steps': self.valid_step_count,
             'failed_steps': self.failed_step_count,
             'success_rate': self.valid_step_count / max(self.valid_step_count + self.failed_step_count, 1),
             'consecutive_failures': self.consecutive_failures,
-            'recovery_attempts': self.recovery_attempts,
-            'loss_trend': trend
+            'recovery_attempts': self.recovery_attempts
         }
-    
-    def get_training_statistics(self) -> Dict:
-        """Get comprehensive training statistics"""
         
-        return {
-            'total_valid_steps': self.valid_step_count,
-            'total_failed_steps': self.failed_step_count,
-            'best_loss': self.best_loss,
-            'recent_avg_loss': np.mean(list(self.loss_history)[-50:]) if self.loss_history else float('inf'),
-            'epoch_losses': self.epoch_losses,
-            'recovery_attempts': self.recovery_attempts,
-            'current_consecutive_failures': self.consecutive_failures
-        }
+        # Add Phase 2 metrics if available
+        if self.phase2_status['available_count'] > 0:
+            phase2_summary = {
+                'phase2_features_active': self.phase2_status['available_count'],
+                'specialization_transitions': dict(self.specialization_transitions),
+                'constellation_adaptations': self.constellation_adaptations,
+                'avg_selective_processing_efficiency': (
+                    np.mean(self.selective_processing_efficiency) 
+                    if self.selective_processing_efficiency else 0.0
+                ),
+                'avg_computation_savings': (
+                    np.mean(self.onk_computation_savings) 
+                    if self.onk_computation_savings else 0.0
+                ),
+                'avg_cache_hit_rate': (
+                    np.mean(self.cache_hit_rates) 
+                    if self.cache_hit_rates else 0.0
+                )
+            }
+            base_summary.update(phase2_summary)
+        
+        return base_summary
 
 
-class EnhancedStabilityConfig:
-    """Enhanced configuration system with stability-focused defaults"""
+class EnhancedPhase2Config:
+    """FIXED: Enhanced configuration system with proper parameter handling"""
     
     @staticmethod
-    def get_stability_enhanced_configs():
-        """Get stability-enhanced hardware configurations"""
+    def get_enhanced_configs():
+        """Get enhanced configurations with Phase 2 integration and fixed parameter handling"""
         
-        return {
+        # Get base predefined configurations
+        base_configs = get_predefined_configurations()
+        
+        # Enhanced configurations combining stability + Phase 2
+        enhanced_configs = {
+            # Stability-first configurations (Phase 2 features optional)
             "stability_1k": {
-                "name": "🛡️  Stability-First 1K - Ultra Safe",
-                "description": "Maximum stability for troubleshooting",
+                "name": "🛡️ Stability-First 1K - Ultra Safe",
+                "description": "Maximum stability for troubleshooting, basic Phase 2",
                 "memory_limit_gb": 3.0,
                 "config": {
+                    **create_default_config(),
                     "model_dim": 256,
                     "num_layers": 2,
                     "num_splats": 6,
-                    "max_splats": 32,
+                    "max_splats": 24,
                     "batch_size": 1,
                     "gradient_accumulation_steps": 8,
-                    "mixed_precision": True,
-                    "gradient_checkpointing": True,
                     "target_sequences": 500,
                     "steps_per_epoch": 40,
                     "seq_length": 1024,
                     "max_seq_len": 1024,
+                    "epochs": 30,
+                    
+                    # Minimal Phase 2 features for testing
+                    "enable_hierarchical_caching": True,
+                    "enable_splat_aware_feedforward": False,  # Start conservative
+                    "enable_selective_processing": False,
+                    "enable_splat_specialization": False,
+                    "enable_constellation_templates": False,
+                    
+                    # FIXED: Clean feedforward kwargs
+                    "feedforward_kwargs": {},  # No conflicting parameters
                     
                     # Enhanced stability controls
                     "max_births_per_epoch": 1,
                     "birth_cooldown": 10,
-                    "max_pending_births": 25,
-                    "coverage_threshold": 0.08,
-                    "min_cluster_size": 12,
-                    "max_cluster_size": 80,
-                    
-                    # Health controls
-                    "health_check_frequency": 3,
                     "emergency_recovery_enabled": True,
-                    "layer_health_thresholds": [0.70, 0.50],
-                    
-                    # Training stability
-                    "progressive_activation_strict": True,
-                    "loss_validation_strict": True,
-                    "gradient_safety_strict": True,
+                    "memory_monitoring_enabled": True,
+                    "cleanup_frequency": 5,
                 }
             },
             
-            "stability_2k": {
-                "name": "🛡️  Stability-Enhanced 2K",
-                "description": "Proven stable 2K configuration",
-                "memory_limit_gb": 4.0,
+            "stability_2k_phase2": {
+                "name": "🛡️🌟 Stability 2K + Phase 2 Basic",
+                "description": "Stable 2K with basic Phase 2 features enabled",
+                "memory_limit_gb": 4.5,
                 "config": {
+                    **create_default_config(),
                     "model_dim": 320,
                     "num_layers": 3,
                     "num_splats": 8,
-                    "max_splats": 48,
+                    "max_splats": 32,
                     "batch_size": 1,
                     "gradient_accumulation_steps": 6,
-                    "mixed_precision": True,
-                    "gradient_checkpointing": True,
                     "target_sequences": 800,
                     "steps_per_epoch": 60,
                     "seq_length": 2048,
                     "max_seq_len": 2048,
+                    "epochs": 50,
+                    
+                    # Basic Phase 2 features
+                    "enable_hierarchical_caching": True,
+                    "enable_splat_aware_feedforward": True,
+                    "enable_selective_processing": True,
+                    "enable_splat_specialization": False,  # Advanced feature
+                    "enable_constellation_templates": False,  # Advanced feature
+                    
+                    # Phase 2 configurations
+                    "feedforward_type": "splat_aware",
+                    "selection_threshold": 0.5,
+                    "trajectory_cache_levels": ["local", "chunk"],
+                    
+                    # FIXED: Clean feedforward kwargs
+                    "feedforward_kwargs": {},
                     
                     # Stability controls
                     "max_births_per_epoch": 1,
                     "birth_cooldown": 8,
-                    "max_pending_births": 40,
-                    "coverage_threshold": 0.06,
-                    "min_cluster_size": 15,
-                    "max_cluster_size": 120,
-                    
-                    # Health controls
-                    "health_check_frequency": 3,
                     "emergency_recovery_enabled": True,
-                    "layer_health_thresholds": [0.65, 0.45, 0.35],
-                    
-                    # Training stability
-                    "progressive_activation_strict": True,
-                    "loss_validation_strict": True,
-                    "gradient_safety_strict": True,
+                    "memory_monitoring_enabled": True,
                 }
             },
             
-            "stability_4k": {
-                "name": "🛡️  Stability-Enhanced 4K - Fixed",
-                "description": "Fixed 4K configuration with comprehensive stability",
-                "memory_limit_gb": 4.8,
+            "research_4k_full_phase2": {
+                "name": "🔬🌟 Research 4K - Complete Phase 2",
+                "description": "Full Phase 2 implementation for research and testing",
+                "memory_limit_gb": 8.0,
                 "config": {
-                    # Core architecture - optimized for O(n*k) efficiency
-                    "model_dim": 192,           # Sweet spot: light enough for many splats
-                    "num_layers": 3,
-                    "num_splats": 64,           # 4x more splats = ~128 tokens per splat
-                    "max_splats": 256,          # Reasonable upper bound for 4K context
-                    "min_splats": 32,           # Never drop below minimum coverage
-                    
-                    # Training parameters
-                    "batch_size": 1,
-                    "gradient_accumulation_steps": 8,
-                    "mixed_precision": True,
-                    "gradient_checkpointing": True,
-                    "target_sequences": 1000,
-                    "steps_per_epoch": 75,
+                    **create_onk_enhanced_config(),
+                    "model_dim": 512,
+                    "num_layers": 6,
+                    "num_splats": 20,
+                    "max_splats": 48,
+                    "batch_size": 2,
+                    "gradient_accumulation_steps": 4,
+                    "target_sequences": 3000,
+                    "steps_per_epoch": 80,
                     "seq_length": 4096,
                     "max_seq_len": 4096,
+                    "epochs": 75,
                     
-                    # Memory optimizations
-                    "use_memory_efficient_attention": True,
-                    "attention_chunk_size": 256,    # Smaller chunks for more splats
-                    "optimize_splat_sampling": True,
-                    "splat_sample_ratio": 0.15,     # Aggressive sampling for efficiency
+                    # Full Phase 2 feature set
+                    "enable_hierarchical_caching": True,
+                    "enable_splat_aware_feedforward": True,
+                    "enable_selective_processing": True,
+                    "enable_splat_specialization": True,
+                    "enable_constellation_templates": True,
+                    "enable_hierarchical_norm": True,
+                    "enable_sparse_output": True,
                     
-                    # Birth system - enable self-organization
-                    "max_births_per_epoch": 12,     # Generous but controlled
-                    "birth_frequency": 0.8,         # 80% chance to process birth requests
-                    "max_pending_births": 100,      # Large queue for flexibility
-                    "coverage_threshold": 0.08,     # Higher - easier to justify births
-                    "min_cluster_size": 6,          # Lower barrier for births
-                    "max_cluster_size": 100,        # Reasonable cluster limit
+                    # Advanced Phase 2 configurations
+                    "feedforward_type": "splat_aware",
+                    "onk_optimization_level": "standard",
+                    "trajectory_cache_levels": ["local", "chunk", "sequence"],
                     
-                    # Death/pruning system - population management
-                    "enable_splat_pruning": True,
-                    "pruning_frequency": 3,         # Every 3 epochs
-                    "prune_threshold": 0.05,        # Remove bottom 5% performers
-                    "min_usefulness_threshold": 0.08, # Absolute minimum to survive
-                    "redundancy_distance": 3.0,     # Remove splats closer than this
+                    # FIXED: Clean feedforward kwargs
+                    "feedforward_kwargs": {},
                     
-                    # Layer-specific splat distribution
-                    "layer_splat_distribution": [12, 10, 10],  # More in early layers
-                    "layer_birth_rates": [0.6, 0.3, 0.1],     # Favor early layer births
-                    
-                    # Health system - adaptive thresholds
-                    "health_check_frequency": 2,
+                    # Enhanced stability with Phase 2
+                    "max_births_per_epoch": 2,
+                    "birth_cooldown": 6,
                     "emergency_recovery_enabled": True,
-                    "layer_health_thresholds": [0.60, 0.40, 0.30],  # Adjusted for more splats
-                    "health_recovery_strength": [0.12, 0.08, 0.05], # Layer-specific recovery
-                    
-                    # Progressive training - faster activation
-                    "progressive_activation_strict": False,   # More flexible with many splats
-                    "warmup_epochs": 2,                      # Faster warmup
-                    "layer_activation_health_req": [0.50, 0.35, 0.25],  # Lower barriers
-                    
-                    # Attention-specific optimizations
-                    "splat_radius_limits": [6.0, 8.0, 10.0], # Layer-specific max radius
-                    "adaptive_radius_enabled": True,
-                    "radius_expansion_penalty": 2.0,         # Discourage large radii
-                    
-                    # Training stability
-                    "loss_validation_strict": True,
-                    "gradient_safety_strict": True,
-                    "early_stopping_patience": 15,
-                    "gradient_clip_value": 0.8,             # Tighter clipping
-                    
-                    # Sampling optimizations for many splats
-                    "token_sampling_strategy": "strategic",   # Mix random + structured
-                    "trajectory_sample_ratio": 0.2,         # 20% for trajectory analysis
-                    "stats_update_frequency": 5,            # Less frequent stats updates
-                    
-                    # Birth request filtering - quality over quantity
-                    "birth_request_filters": {
-                        "min_distance_from_existing": 4.0,   # Prevent clustering
-                        "urgency_threshold": 0.2,            # Only urgent requests
-                        "cluster_size_multiplier": 1.5,      # Prefer larger clusters
-                        "layer_depth_penalty": 0.1           # Reduce deep layer births
-                    },
-                    # Memory management
-                    "cleanup_frequency": 5,
-                    "cuda_cache_cleanup": True,
                     "memory_monitoring_enabled": True,
-                    "oom_recovery_enabled": True,
-                    
-                    # Experimental features for O(n*k) optimization
-                    "enable_splat_specialization": True,    # Let splats specialize by role
-                    "cross_layer_splat_sharing": False,     # Keep layers independent for now
-                    "dynamic_splat_rebalancing": True,      # Move splats between regions
-                    "attention_matrix_chunking": True,      # Process attention in chunks
                 }
-            }
+            },
+            
+            "production_8k_optimized": {
+                "name": "🏭🚀 Production 8K - Optimized Phase 2",
+                "description": "Production-ready 8K with optimized Phase 2 features",
+                "memory_limit_gb": 12.0,
+                "config": {
+                    **create_onk_enhanced_config(),
+                    "model_dim": 768,
+                    "num_layers": 8,
+                    "num_splats": 24,
+                    "max_splats": 64,
+                    "batch_size": 1,
+                    "gradient_accumulation_steps": 8,
+                    "target_sequences": 5000,
+                    "steps_per_epoch": 120,
+                    "seq_length": 8192,
+                    "max_seq_len": 8192,
+                    "epochs": 100,
+                    
+                    # Production-optimized Phase 2 features
+                    "enable_hierarchical_caching": True,
+                    "enable_splat_aware_feedforward": True,
+                    "enable_selective_processing": True,
+                    "enable_splat_specialization": True,
+                    "enable_constellation_templates": True,
+                    "enable_hierarchical_norm": False,  # Conservative for production
+                    "enable_sparse_output": True,
+                    
+                    # Production Phase 2 configurations
+                    "feedforward_type": "splat_aware",
+                    "onk_optimization_level": "standard",  # Not aggressive for stability
+                    "trajectory_cache_levels": ["local", "chunk"],  # Conservative caching
+                    
+                    # FIXED: Clean feedforward kwargs
+                    "feedforward_kwargs": {},
+                    
+                    # Production stability
+                    "max_births_per_epoch": 1,
+                    "birth_cooldown": 10,
+                    "emergency_recovery_enabled": True,
+                    "memory_monitoring_enabled": True,
+                    "cleanup_frequency": 3,  # Frequent cleanup for long sequences
+                }
+            },
+            
+            # Include original base configurations for compatibility
+            **base_configs
         }
-
-
-# [Rest of the class definitions would continue with similar improvements...]
-
-class StabilityEnhancedSplatFlowTrainer:
-    """Main trainer class with all stability enhancements integrated"""
-    
-    def __init__(self, hardware_tier: str = "stability_2k", 
-                 dataset_config: str = "conservative", experiment_name: str = None):
         
-        self.hardware_tier = hardware_tier
+        return enhanced_configs
+
+
+class Phase2SplatFlowTrainer:
+    """FIXED: Enhanced trainer with Phase 2 integration and proper configuration validation"""
+    
+    def __init__(self, config_name: str = "stability_2k_phase2", 
+                 dataset_config: str = "conservative", 
+                 experiment_name: str = None):
+        
+        self.config_name = config_name
         self.dataset_config = dataset_config
-        self.experiment_name = experiment_name or f"stability_splatflow_{hardware_tier}_{int(time.time())}"
+        self.experiment_name = experiment_name or f"phase2_splatflow_{config_name}_{int(time.time())}"
         
         # Setup directory structure
         self.experiment_dir = f"experiments/{self.experiment_name}"
         os.makedirs(self.experiment_dir, exist_ok=True)
         os.makedirs(f"{self.experiment_dir}/checkpoints", exist_ok=True)
         os.makedirs(f"{self.experiment_dir}/logs", exist_ok=True)
+        os.makedirs(f"{self.experiment_dir}/phase2_analysis", exist_ok=True)
         
-        # Get stability-enhanced configuration
-        stability_configs = EnhancedStabilityConfig.get_stability_enhanced_configs()
-        if hardware_tier not in stability_configs:
-            raise ValueError(f"Unknown hardware tier: {hardware_tier}. "
-                           f"Available: {list(stability_configs.keys())}")
+        # Get enhanced configuration
+        enhanced_configs = EnhancedPhase2Config.get_enhanced_configs()
+        if config_name not in enhanced_configs:
+            raise ValueError(f"Unknown configuration: {config_name}. "
+                           f"Available: {list(enhanced_configs.keys())}")
         
-        self.hardware_config = stability_configs[hardware_tier]
-        logger.info(f"🛡️  Stability Tier: {self.hardware_config['name']}")
+        self.hardware_config = enhanced_configs[config_name]
+        logger.info(f"🌟 Phase 2 Configuration: {self.hardware_config['name']}")
         logger.info(f"    Description: {self.hardware_config['description']}")
         
-        # Build configuration
-        self.config = self._build_stability_config()
+        # CRITICAL FIX: Build and validate configuration
+        self.config = self._build_phase2_config()
         
-        # Initialize stability systems
-        self.birth_controllers = {}  # Will be initialized per layer
-        self.health_recovery_systems = {}  # Will be initialized per layer
-        self.progressive_stabilizer = None  # Will be initialized with model
-        self.robust_training_loop = None  # Will be initialized with trainer
+        # Initialize Phase 2 monitoring
+        self.training_monitor = Phase2TrainingMonitor()
+        
+        # Phase 2 statistics
+        self.phase2_analytics = {
+            'feature_utilization': defaultdict(int),
+            'optimization_gains': [],
+            'stability_metrics': [],
+            'convergence_analysis': []
+        }
         
         # Save configuration
         self._save_experiment_config()
         
-        logger.info(f"🛡️  Stability-Enhanced SplatFlow Trainer initialized")
+        logger.info(f"🌟 Phase 2 Enhanced SplatFlow Trainer initialized")
+        logger.info(f"    Phase 2 features enabled: {self._count_enabled_features()}")
+        logger.info(f"    Available Phase 2 features: {sum(PHASE_2_FEATURES.values())}/{len(PHASE_2_FEATURES)}")
     
-    def _build_stability_config(self) -> Dict:
-        """Build stability-enhanced configuration"""
+    def _count_enabled_features(self) -> int:
+        """Count enabled Phase 2 features in configuration"""
+        return sum(1 for key in ['enable_splat_aware_feedforward', 'enable_selective_processing', 
+                                'enable_splat_specialization', 'enable_constellation_templates',
+                                'enable_hierarchical_caching'] 
+                  if self.config.get(key, False))
+    
+    def _build_phase2_config(self) -> Dict:
+        """FIXED: Build Phase 2-enhanced configuration with proper validation"""
         
-        # Start with SplatFlow defaults
-        config = create_default_config()
+        # Start with hardware tier settings
+        config = self.hardware_config['config'].copy()
         
-        # Apply hardware tier settings
-        config.update(self.hardware_config['config'])
+        # CRITICAL FIX: Validate and clean the configuration
+        config = validate_config(config)
         
-        # Enhanced training settings
-        config.update({
-            'epochs': 200,  # Reduced from 250 for more focused training
-            'learning_rate': 1.5e-4,  # Slightly reduced for stability
+        # Enhanced dataset settings based on Phase 2 capabilities
+        base_target_sequences = config.get('target_sequences', 1000)
+        base_steps_per_epoch = config.get('steps_per_epoch', 50)
+        
+        dataset_configs = {
+            "minimal": {
+                "target_sequences": base_target_sequences,
+                "steps_per_epoch": base_steps_per_epoch
+            },
+            "conservative": {
+                "target_sequences": int(base_target_sequences * 1.2),
+                "steps_per_epoch": int(base_steps_per_epoch * 1.1)
+            },
+            "extensive": {
+                "target_sequences": int(base_target_sequences * 1.5),
+                "steps_per_epoch": int(base_steps_per_epoch * 1.3)
+            }
+        }
+        
+        config.update(dataset_configs[self.dataset_config])
+        
+        # Enhanced training settings for Phase 2
+        phase2_training_enhancements = {
+            'learning_rate': 1.5e-4,  # Slightly reduced for Phase 2 stability
             'weight_decay': 0.01,
             'warmup_epochs': 3,
             'eval_interval': 5,
@@ -1094,405 +436,188 @@ class StabilityEnhancedSplatFlowTrainer:
             'log_interval': 5,
             'checkpoint_dir': f"{self.experiment_dir}/checkpoints",
             
-            # Progressive training with strict health requirements
-            'use_progressive_training': True,
+            # Phase 2 specific settings
+            'content_type': 'general',  # For constellation templates
+            'enhanced_gradient_management': True,
+            'adaptive_batch_sizing': config.get('enable_splat_aware_feedforward', False),
+            'dynamic_sequence_padding': config.get('enable_splat_aware_feedforward', False),
             
-            # Stability enhancements
+            # Memory and stability
             'enable_memory_monitoring': True,
-            'cleanup_frequency': 8,
+            'cleanup_frequency': config.get('cleanup_frequency', 5),
             'cuda_safety_enabled': True,
-            'stability_mode_enabled': True,  # NEW: Enable all stability features
+            'stability_mode_enabled': True,
             
             # Dataset configuration
-            'dataset_config': self.dataset_config,
-        })
+            'dataset_config': {
+                'type': self.dataset_config,
+                'phase2_optimized': config.get('enable_splat_aware_feedforward', False)
+            }
+        }
         
-        logger.info(f"🛡️  Stability Configuration:")
-        logger.info(f"   seq_length: {config['seq_length']}")
-        logger.info(f"   max_seq_len: {config['max_seq_len']}")
-        logger.info(f"   model_dim: {config['model_dim']}")
-        logger.info(f"   max_births_per_epoch: {config['max_births_per_epoch']}")
-        logger.info(f"   max_pending_births: {config['max_pending_births']}")
+        config.update(phase2_training_enhancements)
+        
+        # Final validation to ensure all parameters are clean
+        config = validate_config(config)
+        
+        logger.info(f"🌟 Phase 2 Configuration Built:")
+        logger.info(f"   Model: {config['model_dim']}d, {config['num_layers']} layers, {config['num_splats']} splats")
+        logger.info(f"   Sequence: {config['seq_length']} length, {config['batch_size']} batch size")
+        logger.info(f"   Training: {config['epochs']} epochs, {config['steps_per_epoch']} steps/epoch")
+        logger.info(f"   Target sequences: {config['target_sequences']:,}")
+        
+        if config.get('enable_splat_aware_feedforward', False):
+            logger.info(f"   🚀 O(n*k) feedforward: {config.get('enable_splat_aware_feedforward', False)}")
+            logger.info(f"   🎯 Selective processing: {config.get('enable_selective_processing', False)}")
+            logger.info(f"   🎭 Splat specialization: {config.get('enable_splat_specialization', False)}")
+            logger.info(f"   🌌 Constellation templates: {config.get('enable_constellation_templates', False)}")
+            
+            if config.get('onk_optimization_level'):
+                logger.info(f"   ⚡ O(n*k) optimization level: {config['onk_optimization_level']}")
         
         return config
     
-    def create_stability_enhanced_trainer(self):
-        """Create trainer with all stability enhancements"""
+    def _save_experiment_config(self):
+        """Save experiment configuration and Phase 2 status"""
         
-        # Create base trainer
-        trainer = SplatFlowTrainingOrchestrator(self.config)
+        config_path = os.path.join(self.experiment_dir, "experiment_config.json")
         
-        # Initialize training components
-        success = trainer.initialize_training()
-        if not success:
-            raise RuntimeError("Failed to initialize training components")
+        experiment_config = {
+            'experiment_name': self.experiment_name,
+            'config_name': self.config_name,
+            'dataset_config': self.dataset_config,
+            'hardware_config': self.hardware_config,
+            'training_config': self.config,
+            'phase2_status': self.training_monitor.phase2_status,
+            'created_at': datetime.now().isoformat(),
+            'pytorch_version': torch.__version__,
+            'phase2_features_available': PHASE_2_FEATURES
+        }
         
-        # Apply stability enhancements
-        self._apply_stability_enhancements(trainer)
+        with open(config_path, 'w') as f:
+            json.dump(experiment_config, f, indent=2, default=str)
         
-        return trainer
+        logger.info(f"💾 Experiment configuration saved to {config_path}")
     
-    def _apply_stability_enhancements(self, trainer):
-        """Apply all stability enhancements to the trainer"""
+    def run_phase2_diagnostics(self):
+        """Run comprehensive Phase 2 diagnostics"""
         
-        logger.info("🛡️  Applying comprehensive stability enhancements...")
+        logger.info("🔍 Running Phase 2 diagnostics...")
         
-        # Initialize birth controllers for each layer
-        for layer_idx, layer in enumerate(trainer.model.layers):
-            if hasattr(layer, 'attention'):
-                max_pending = self.config.get('max_pending_births', 50)
-                birth_controller = AdaptiveDeepLayerBirthController(layer_idx, max_pending)
-                self.birth_controllers[layer_idx] = birth_controller
-                
-                # Replace birth request callback with controlled version
-                self._install_birth_controller(layer.attention, birth_controller)
-                
-                logger.info(f"   ✅ Birth controller installed for layer {layer_idx}")
+        # Check Phase 2 availability
+        phase2_status = get_phase2_status()
+        logger.info(f"📊 Phase 2 Status: {phase2_status['available_count']}/{phase2_status['total_features']} features available")
         
-        # Initialize health recovery systems
-        for layer_idx, layer in enumerate(trainer.model.layers):
-            if hasattr(layer, 'attention'):
-                health_recovery = LayerAwareHealthRecovery(layer_idx, self.config['model_dim'])
-                self.health_recovery_systems[layer_idx] = health_recovery
-                
-                logger.info(f"   ✅ Health recovery system installed for layer {layer_idx}")
+        for feature, available in phase2_status['features_available'].items():
+            status_icon = "✅" if available else "❌"
+            logger.info(f"   {status_icon} {feature}: {'Available' if available else 'Not Available'}")
         
-        # Initialize progressive stabilizer
-        self.progressive_stabilizer = ProgressiveTrainingStabilizer(trainer.model, self.config['warmup_epochs'])
-        logger.info(f"   ✅ Progressive stabilizer installed")
-        
-        # Initialize robust training loop
-        self.robust_training_loop = RobustTrainingLoop(trainer, self.config)
-        logger.info(f"   ✅ Robust training loop installed")
-        
-        logger.info("🛡️  All stability enhancements applied successfully")
-    
-    def _install_birth_controller(self, attention_layer, birth_controller):
-        """Install birth controller in attention layer"""
-        
-        try:
-            # Store original birth request method
-            if hasattr(attention_layer, 'birth_manager'):
-                original_request = attention_layer.birth_manager.request_splat_birth
-                
-                # Create wrapper that uses our controller
-                def controlled_birth_request(position, reason, urgency=1.0, 
-                                           parent_splat_id=None, token_cluster_size=0):
-                    return birth_controller.request_birth(
-                        position, reason, urgency, parent_splat_id, token_cluster_size
-                    )
-                
-                # Replace the method
-                attention_layer.birth_manager.request_splat_birth = controlled_birth_request
-                
-                # Also apply to individual splats
-                if hasattr(attention_layer, 'splats'):
-                    for splat in attention_layer.splats:
-                        if hasattr(splat, 'birth_request_callback'):
-                            splat.birth_request_callback = controlled_birth_request
-        
-        except Exception as e:
-            logger.warning(f"Failed to install birth controller: {e}")
-    
-    def enhanced_training_epoch(self, trainer, dataloader, epoch):
-        """Enhanced training epoch with all stability systems active"""
-        
-        trainer.model.train()
-        start_time = time.time()
-        
-        # Get mixed precision components
-        scaler = getattr(self, 'scaler', None)
-        if self.config.get('mixed_precision', False) and not scaler:
-            try:
-                scaler = torch.amp.GradScaler('cuda')
-                autocast_context = torch.amp.autocast('cuda')
-                self.scaler = scaler
-            except:
-                try:
-                    from torch.cuda.amp import GradScaler, autocast
-                    scaler = GradScaler()
-                    autocast_context = autocast()
-                    self.scaler = scaler
-                except:
-                    scaler = None
-                    autocast_context = nullcontext()
-        else:
-            autocast_context = nullcontext()
-        
-        # Progressive layer management
-        layer_health_stats = self._assess_all_layer_health(trainer.model, epoch)
-        active_layers = self.progressive_stabilizer.update_progressive_activation(epoch, layer_health_stats)
-        
-        # Process birth requests for active layers only
-        self._process_birth_requests_for_active_layers(trainer.model, active_layers, epoch)
-        
-        # Apply health recovery for unhealthy layers
-        self._apply_health_recovery_for_all_layers(trainer.model, epoch)
-        
-        # Training loop
-        valid_losses = []
-        for batch_idx, batch in enumerate(dataloader):
-            if batch_idx >= self.config['steps_per_epoch']:
-                break
+        # Run Phase 2 tests if features are available
+        if phase2_status['available_count'] > 0:
+            logger.info("🧪 Running Phase 2 component tests...")
+            test_results = run_phase2_tests()
             
-            # Robust training step
-            loss = self.robust_training_loop.safe_training_step(
-                batch, epoch, batch_idx, scaler, autocast_context
-            )
-            
-            if loss is not None:
-                valid_losses.append(loss)
-            
-            # Periodic logging
-            if (batch_idx + 1) % self.config['log_interval'] == 0:
-                self._log_training_progress(epoch, batch_idx, loss, layer_health_stats, active_layers)
+            logger.info(f"🧪 Phase 2 Tests: {test_results['passed']}/{test_results['total']} passed")
+            for test_name, result in test_results['results'].items():
+                if result is not None:
+                    status_icon = "✅" if result else "❌"
+                    logger.info(f"   {status_icon} {test_name}: {'PASS' if result else 'FAIL'}")
         
-        # Epoch summary
-        epoch_time = time.time() - start_time
-        epoch_summary = self.robust_training_loop.get_epoch_summary(epoch)
-        
-        # Enhanced logging
-        logger.info(f"🛡️  Epoch {epoch} Summary:")
-        logger.info(f"   Loss: {epoch_summary['avg_loss']:.4f} (best: {epoch_summary['best_loss']:.4f})")
-        logger.info(f"   Valid steps: {len(valid_losses)}/{self.config['steps_per_epoch']}")
-        logger.info(f"   Active layers: {active_layers}/{len(trainer.model.layers)}")
-        logger.info(f"   Time: {epoch_time:.1f}s")
-        
-        return epoch_summary
-    
-    def _assess_all_layer_health(self, model, epoch):
-        """Assess health of all layers"""
-        
-        layer_health_stats = []
-        
-        for layer_idx, layer in enumerate(model.layers):
-            if layer_idx in self.health_recovery_systems and hasattr(layer, 'attention'):
-                health_system = self.health_recovery_systems[layer_idx]
-                splats = getattr(layer.attention, 'splats', [])
-                
-                status, health_ratio, healthy_count = health_system.assess_layer_health(splats, epoch)
-                
-                layer_health_stats.append({
-                    'layer_idx': layer_idx,
-                    'status': status,
-                    'health_ratio': health_ratio,
-                    'healthy_count': healthy_count,
-                    'total_splats': len(splats)
-                })
-            else:
-                # Default stats for layers without health systems
-                layer_health_stats.append({
-                    'layer_idx': layer_idx,
-                    'status': 'UNKNOWN',
-                    'health_ratio': 0.0,
-                    'healthy_count': 0,
-                    'total_splats': 0
-                })
-        
-        return layer_health_stats
-    
-    def _process_birth_requests_for_active_layers(self, model, active_layers, epoch):
-        """Process birth requests only for active layers"""
-        
-        for layer_idx in range(min(active_layers, len(model.layers))):
-            if layer_idx in self.birth_controllers:
-                birth_controller = self.birth_controllers[layer_idx]
-                layer = model.layers[layer_idx]
-                
-                if hasattr(layer, 'attention') and hasattr(layer.attention, 'splats'):
-                    # Process queue
-                    max_births = 1 if layer_idx > 0 else 2  # Fewer births for deeper layers
-                    processed_requests = birth_controller.process_queue(
-                        layer.attention.splats, epoch, max_births
-                    )
-                    
-                    # Apply births (this would integrate with existing birth system)
-                    if processed_requests:
-                        logger.debug(f"Layer {layer_idx}: Processing {len(processed_requests)} birth requests")
-    
-    def _apply_health_recovery_for_all_layers(self, model, epoch):
-        """Apply health recovery for all layers that need it"""
-        
-        # Get sample embeddings for recovery
-        try:
-            sample_input = torch.randint(0, 1000, (1, 50), device=model.token_embedding.weight.device)
-            sample_embeddings = model.token_embedding(sample_input)
-        except Exception as e:
-            logger.warning(f"Failed to get sample embeddings for recovery: {e}")
-            return
-        
-        total_recovered = 0
-        
-        for layer_idx, layer in enumerate(model.layers):
-            if layer_idx in self.health_recovery_systems and hasattr(layer, 'attention'):
-                health_system = self.health_recovery_systems[layer_idx]
-                splats = getattr(layer.attention, 'splats', [])
-                
-                if splats:
-                    recovered_count = health_system.apply_recovery_if_needed(
-                        splats, sample_embeddings, epoch
-                    )
-                    total_recovered += recovered_count
-        
-        if total_recovered > 0:
-            logger.info(f"🏥 Total splats recovered this epoch: {total_recovered}")
-    
-    def _log_training_progress(self, epoch, batch_idx, loss, layer_health_stats, active_layers):
-        """Enhanced progress logging"""
-        
-        loss_str = f"{loss:.4f}" if loss is not None else "FAILED"
-        
-        # Health summary
-        health_summary = []
-        for stats in layer_health_stats[:active_layers]:
-            status_icon = {"HEALTHY": "🟢", "WEAK": "🟡", "CRITICAL": "🔴"}.get(stats['status'], "⚪")
-            health_summary.append(f"L{stats['layer_idx']}:{status_icon}")
-        
-        health_str = " ".join(health_summary)
-        
-        # Memory info
-        memory_info = get_gpu_memory_info()
-        memory_str = f"{memory_info['percent_used']:.1f}%" if memory_info else "N/A"
-        
-        logger.info(f"E{epoch} B{batch_idx + 1}: loss={loss_str}, active={active_layers}, "
-                   f"health=[{health_str}], mem={memory_str}")
+        return phase2_status
     
     def train(self) -> Dict:
-        """Run stability-enhanced training"""
+        """Execute training with Phase 2 monitoring and analysis"""
         
-        logger.info(f"🛡️  Starting Stability-Enhanced SplatFlow Training")
-        logger.info(f"   Experiment: {self.experiment_name}")
-        logger.info(f"   Context length: {self.config['seq_length']:,} tokens")
-        logger.info(f"   Hardware tier: {self.hardware_tier}")
-        logger.info(f"   Stability features: ALL ENABLED")
+        logger.info("🚀 Starting Phase 2 Enhanced SplatFlow Training")
+        logger.info("=" * 80)
+        
+        # Run diagnostics
+        phase2_status = self.run_phase2_diagnostics()
         
         # Setup environment
         setup_environment()
         
-        # Create enhanced trainer
-        trainer = self.create_stability_enhanced_trainer()
+        # Display memory info
+        memory_info = get_gpu_memory_info()
+        logger.info(f"💾 GPU Memory: {memory_info.get('allocated_gb', 0):.2f}GB allocated, "
+                   f"{memory_info.get('available_gb', 0):.2f}GB available")
+        
+        training_start_time = time.time()
         
         try:
-            # Replace training loop with enhanced version
-            original_train_epoch = trainer.train_epoch
-            trainer.train_epoch = lambda dl, ep: self.enhanced_training_epoch(trainer, dl, ep)
+            # Create trainer with validated Phase 2 configuration
+            trainer = SplatFlowTrainingOrchestrator(self.config)
             
-            # Run training
-            training_summary = trainer.train()
+            # Store reference for monitoring
+            self.trainer = trainer
             
-            # Restore original method
-            trainer.train_epoch = original_train_epoch
+            # Execute training
+            logger.info(f"🎯 Starting training with {self.config['epochs']} epochs")
+            training_results = trainer.train()
             
-            # Add stability statistics
-            training_summary['stability_stats'] = self._get_stability_statistics()
+            # Enhanced results with Phase 2 analysis
+            enhanced_results = self._analyze_training_results(training_results, training_start_time)
             
-            # Save results
-            self._save_training_results(training_summary)
-            
-            logger.info(f"🎉 Stability-Enhanced Training Completed!")
-            logger.info(f"   Best loss: {training_summary.get('best_loss', 'Unknown')}")
-            logger.info(f"   Total epochs: {training_summary.get('total_epochs', 'Unknown')}")
-            
-            return training_summary
+            return enhanced_results
             
         except Exception as e:
-            logger.error(f"❌ Stability-enhanced training failed: {e}")
-            raise
+            logger.error(f"❌ Training failed: {e}")
+            
+            error_results = {
+                'success': False,
+                'error': str(e),
+                'config_name': self.config_name,
+                'experiment_name': self.experiment_name,
+                'failure_time': datetime.now().isoformat()
+            }
+            
+            # Save error information
+            error_path = os.path.join(self.experiment_dir, "training_error.json")
+            with open(error_path, 'w') as f:
+                json.dump(error_results, f, indent=2)
+            
+            return error_results
+        
+        finally:
+            # Cleanup
+            cleanup_memory()
     
-    def _get_stability_statistics(self) -> Dict:
-        """Get comprehensive stability statistics"""
+    def _analyze_training_results(self, training_results: Dict, training_start_time: float) -> Dict:
+        """Analyze training results with Phase 2 insights"""
         
-        stats = {
-            'birth_controller_stats': {},
-            'health_recovery_stats': {},
-            'progressive_training_stats': {},
-            'robust_training_stats': {}
-        }
+        total_time = time.time() - training_start_time
         
-        # Birth controller statistics
-        for layer_idx, controller in self.birth_controllers.items():
-            stats['birth_controller_stats'][f'layer_{layer_idx}'] = controller.get_statistics()
-        
-        # Health recovery statistics
-        for layer_idx, recovery in self.health_recovery_systems.items():
-            stats['health_recovery_stats'][f'layer_{layer_idx}'] = recovery.get_statistics()
-        
-        # Progressive training statistics
-        if self.progressive_stabilizer:
-            stats['progressive_training_stats'] = self.progressive_stabilizer.get_activation_status()
-        
-        # Robust training statistics
-        if self.robust_training_loop:
-            stats['robust_training_stats'] = self.robust_training_loop.get_training_statistics()
-        
-        return stats
-    
-    def _save_experiment_config(self):
-        """Save enhanced experiment configuration"""
-        
-        config_path = f"{self.experiment_dir}/config.json"
-        
-        experiment_info = {
+        # Base results
+        enhanced_results = {
+            **training_results,
             'experiment_name': self.experiment_name,
-            'hardware_tier': self.hardware_tier,
-            'dataset_config': self.dataset_config,
-            'hardware_config': self.hardware_config,
-            'training_config': self.config,
-            'created_at': datetime.now().isoformat(),
-            'stability_enhancements': [
-                "Adaptive deep layer birth control",
-                "Layer-aware health recovery",
-                "Progressive training stabilization", 
-                "Robust training loop with error handling",
-                "Enhanced loss tracking and validation",
-                "Memory-efficient mixed precision",
-                "CUDA error recovery systems"
-            ],
-            'splatflow_version': "1.0.0-stability-enhanced",
-            'pytorch_version': torch.__version__
+            'config_name': self.config_name,
+            'total_training_time_hours': total_time / 3600,
+            'phase2_features_used': self._count_enabled_features(),
         }
         
-        with open(config_path, 'w') as f:
-            json.dump(experiment_info, f, indent=2)
-        
-        logger.info(f"💾 Stability-enhanced config saved to {config_path}")
-    
-    def _save_training_results(self, training_summary: Dict):
-        """Save comprehensive training results"""
-        
-        results_path = f"{self.experiment_dir}/results.json"
-        
-        results = {
-            'experiment_name': self.experiment_name,
-            'hardware_tier': self.hardware_tier,
-            'dataset_config': self.dataset_config,
-            'training_summary': training_summary,
-            'completed_at': datetime.now().isoformat(),
-            'pytorch_version': torch.__version__,
-            'stability_enhancements_applied': [
-                "Birth request overflow prevention",
-                "Layer health collapse recovery",
-                "Progressive activation gating",
-                "Robust loss tracking",
-                "Comprehensive error handling"
-            ]
-        }
-        
+        # Save comprehensive results
+        results_path = os.path.join(self.experiment_dir, "comprehensive_results.json")
         with open(results_path, 'w') as f:
-            json.dump(results, f, indent=2)
+            json.dump(enhanced_results, f, indent=2, default=str)
         
-        logger.info(f"💾 Stability-enhanced results saved to {results_path}")
+        logger.info(f"💾 Comprehensive results saved to {results_path}")
+        
+        return enhanced_results
 
 
 def main():
-    """Main function with stability-enhanced configurations"""
+    """FIXED: Main function with enhanced Phase 2 configurations"""
     
-    parser = argparse.ArgumentParser(description="Stability-Enhanced SplatFlow Training")
+    parser = argparse.ArgumentParser(description="Phase 2 Enhanced SplatFlow Training")
     
-    parser.add_argument("--tier", "-t",
-                       choices=list(EnhancedStabilityConfig.get_stability_enhanced_configs().keys()),
-                       default="stability_2k",
-                       help="Stability tier configuration")
+    # Get available configurations
+    available_configs = list(EnhancedPhase2Config.get_enhanced_configs().keys())
+    
+    parser.add_argument("--config", "-c",
+                       choices=available_configs,
+                       default="stability_2k_phase2",
+                       help="Configuration to use")
     
     parser.add_argument("--dataset", "-d",
                        choices=["minimal", "conservative", "extensive"],
@@ -1506,71 +631,95 @@ def main():
     parser.add_argument("--epochs", type=int, default=None,
                        help="Override number of epochs")
     
+    parser.add_argument("--run-phase2-tests", action="store_true",
+                       help="Run Phase 2 component tests before training")
+    
+    parser.add_argument("--phase2-diagnostics", action="store_true",
+                       help="Run comprehensive Phase 2 diagnostics")
+    
     args = parser.parse_args()
     
-    print("🛡️  STABILITY-ENHANCED SPLATFLOW TRAINING")
+    print("🌟 PHASE 2 ENHANCED SPLATFLOW TRAINING")
     print("=" * 80)
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"PyTorch version: {torch.__version__}")
-    print(f"Stability tier: {args.tier}")
+    print(f"Configuration: {args.config}")
     print(f"Dataset config: {args.dataset}")
     
-    # Show configuration
-    configs = EnhancedStabilityConfig.get_stability_enhanced_configs()
-    config_info = configs[args.tier]
+    # Show Phase 2 status
+    phase2_status = get_phase2_status()
+    print(f"\n🌟 Phase 2 Status: {phase2_status['available_count']}/{phase2_status['total_features']} features available")
+    print(f"Completion: {phase2_status['completion_percentage']:.1f}%")
     
-    print(f"\n🛡️  Stability Configuration: {config_info['name']}")
-    print(f"    {config_info['description']}")
-    print(f"    Model dimension: {config_info['config']['model_dim']}")
-    print(f"    Sequence length: {config_info['config']['seq_length']:,} tokens")
-    print(f"    Birth control: {config_info['config']['max_births_per_epoch']} births/epoch max")
-    print(f"    Health checks: Every {config_info['config']['health_check_frequency']} epochs")
+    # Run Phase 2 tests if requested
+    if args.run_phase2_tests:
+        print("\n🧪 Running Phase 2 component tests...")
+        test_results = run_phase2_tests()
+        print(f"Tests passed: {test_results['passed']}/{test_results['total']}")
+        if test_results['passed'] != test_results['total']:
+            print("⚠️ Some Phase 2 tests failed - proceeding with available features")
     
-    print(f"\n🛡️  STABILITY ENHANCEMENTS ACTIVE:")
-    print(f"    ✅ Adaptive birth rate limiting")
-    print(f"    ✅ Layer-aware health recovery")
-    print(f"    ✅ Progressive training stabilization")
-    print(f"    ✅ Robust error handling")
-    print(f"    ✅ Enhanced loss tracking")
-    print(f"    ✅ Memory-efficient operations")
+    # Show configuration details
+    configs = EnhancedPhase2Config.get_enhanced_configs()
+    selected_config = configs[args.config]
+    print(f"\n📊 Configuration: {selected_config['name']}")
+    print(f"Description: {selected_config['description']}")
+    print(f"Memory limit: {selected_config.get('memory_limit_gb', 'N/A')}GB")
     
     try:
-        # Create stability-enhanced trainer
-        trainer = StabilityEnhancedSplatFlowTrainer(
-            hardware_tier=args.tier,
+        # Create and run trainer
+        trainer = Phase2SplatFlowTrainer(
+            config_name=args.config,
             dataset_config=args.dataset,
             experiment_name=args.experiment
         )
         
+        # Run diagnostics if requested
+        if args.phase2_diagnostics:
+            print("\n🔍 Running comprehensive Phase 2 diagnostics...")
+            trainer.run_phase2_diagnostics()
+        
         # Override epochs if specified
         if args.epochs:
             trainer.config['epochs'] = args.epochs
-            logger.info(f"🔧 Override epochs: {args.epochs}")
+            print(f"📝 Overriding epochs to {args.epochs}")
         
-        print(f"\n📁 Experiment directory: {trainer.experiment_dir}")
-        print(f"🚀 Starting stability-enhanced training...")
+        print(f"\n🚀 Starting training...")
+        print(f"Experiment: {trainer.experiment_name}")
+        print(f"Phase 2 enabled features: {trainer._count_enabled_features()}")
         
-        # Run training
-        training_summary = trainer.train()
+        # Execute training
+        results = trainer.train()
         
+        # Summary
         print("\n" + "=" * 80)
-        print("🎉 STABILITY-ENHANCED TRAINING COMPLETED!")
-        print("Key improvements applied:")
-        print("   ✅ Birth request overflow eliminated")
-        print("   ✅ Layer health collapse prevented")
-        print("   ✅ Progressive activation stabilized")
-        print("   ✅ Robust loss tracking implemented")
-        print("   ✅ Comprehensive error recovery active")
-        print(f"   📁 Results: {trainer.experiment_dir}")
-        print(f"   📊 Best loss: {training_summary.get('best_loss', 'Unknown'):.4f}")
+        print("📊 TRAINING SUMMARY")
         print("=" * 80)
         
+        if results.get('success', False):
+            print(f"✅ Training completed successfully!")
+            print(f"📈 Final loss: {results.get('final_loss', 'N/A'):.4f}")
+            print(f"📊 Final perplexity: {results.get('final_perplexity', 'N/A'):.2f}")
+            print(f"⏱️ Total time: {results.get('total_training_time_hours', 0):.2f} hours")
+            
+            if 'phase2_analysis' in results:
+                phase2_analysis = results['phase2_analysis']
+                print(f"\n🌟 Phase 2 Analysis:")
+                print(f"   Features utilized: {phase2_analysis.get('features_utilized', 0)}")
+                print(f"   Optimization gain: {phase2_analysis.get('avg_optimization_gain', 0):.3f}")
+                print(f"   Stability score: {phase2_analysis.get('stability_score', 0):.3f}")
+        else:
+            print(f"❌ Training failed: {results.get('error', 'Unknown error')}")
+        
+        print(f"\n📁 Results saved to: {trainer.experiment_dir}")
+        
     except KeyboardInterrupt:
-        print("\n⚠️  Training interrupted by user")
+        print("\n⚠️ Training interrupted by user")
     except Exception as e:
-        print(f"\n❌ Stability-enhanced training failed: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"\n❌ Training failed with error: {e}")
+        raise
+    finally:
+        cleanup_memory()
 
 
 if __name__ == "__main__":
