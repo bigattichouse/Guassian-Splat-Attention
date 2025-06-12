@@ -940,10 +940,14 @@ class EnhancedStabilityConfig:
                 "description": "Fixed 4K configuration with comprehensive stability",
                 "memory_limit_gb": 4.8,
                 "config": {
-                    "model_dim": 384,  # Reduced from 400 for more stability
+                    # Core architecture - optimized for O(n*k) efficiency
+                    "model_dim": 192,           # Sweet spot: light enough for many splats
                     "num_layers": 3,
-                    "num_splats": 10,  # Reduced from 12
-                    "max_splats": 64,  # Reduced from 256
+                    "num_splats": 64,           # 4x more splats = ~128 tokens per splat
+                    "max_splats": 256,          # Reasonable upper bound for 4K context
+                    "min_splats": 32,           # Never drop below minimum coverage
+                    
+                    # Training parameters
                     "batch_size": 1,
                     "gradient_accumulation_steps": 8,
                     "mixed_precision": True,
@@ -953,29 +957,76 @@ class EnhancedStabilityConfig:
                     "seq_length": 4096,
                     "max_seq_len": 4096,
                     
-                    # Advanced memory optimizations
+                    # Memory optimizations
                     "use_memory_efficient_attention": True,
-                    "attention_chunk_size": 512,
+                    "attention_chunk_size": 256,    # Smaller chunks for more splats
                     "optimize_splat_sampling": True,
+                    "splat_sample_ratio": 0.15,     # Aggressive sampling for efficiency
                     
-                    # Strict birth controls
-                    "max_births_per_epoch": 1,  # Very conservative
-                    "birth_cooldown": 6,
-                    "max_pending_births": 50,
-                    "coverage_threshold": 0.04,
-                    "min_cluster_size": 20,
-                    "max_cluster_size": 150,
+                    # Birth system - enable self-organization
+                    "max_births_per_epoch": 12,     # Generous but controlled
+                    "birth_frequency": 0.8,         # 80% chance to process birth requests
+                    "max_pending_births": 100,      # Large queue for flexibility
+                    "coverage_threshold": 0.08,     # Higher - easier to justify births
+                    "min_cluster_size": 6,          # Lower barrier for births
+                    "max_cluster_size": 100,        # Reasonable cluster limit
                     
-                    # Comprehensive health system
+                    # Death/pruning system - population management
+                    "enable_splat_pruning": True,
+                    "pruning_frequency": 3,         # Every 3 epochs
+                    "prune_threshold": 0.05,        # Remove bottom 5% performers
+                    "min_usefulness_threshold": 0.08, # Absolute minimum to survive
+                    "redundancy_distance": 3.0,     # Remove splats closer than this
+                    
+                    # Layer-specific splat distribution
+                    "layer_splat_distribution": [12, 10, 10],  # More in early layers
+                    "layer_birth_rates": [0.6, 0.3, 0.1],     # Favor early layer births
+                    
+                    # Health system - adaptive thresholds
                     "health_check_frequency": 2,
                     "emergency_recovery_enabled": True,
-                    "layer_health_thresholds": [0.65, 0.45, 0.35],
+                    "layer_health_thresholds": [0.60, 0.40, 0.30],  # Adjusted for more splats
+                    "health_recovery_strength": [0.12, 0.08, 0.05], # Layer-specific recovery
                     
-                    # Maximum training stability
-                    "progressive_activation_strict": True,
+                    # Progressive training - faster activation
+                    "progressive_activation_strict": False,   # More flexible with many splats
+                    "warmup_epochs": 2,                      # Faster warmup
+                    "layer_activation_health_req": [0.50, 0.35, 0.25],  # Lower barriers
+                    
+                    # Attention-specific optimizations
+                    "splat_radius_limits": [6.0, 8.0, 10.0], # Layer-specific max radius
+                    "adaptive_radius_enabled": True,
+                    "radius_expansion_penalty": 2.0,         # Discourage large radii
+                    
+                    # Training stability
                     "loss_validation_strict": True,
                     "gradient_safety_strict": True,
                     "early_stopping_patience": 15,
+                    "gradient_clip_value": 0.8,             # Tighter clipping
+                    
+                    # Sampling optimizations for many splats
+                    "token_sampling_strategy": "strategic",   # Mix random + structured
+                    "trajectory_sample_ratio": 0.2,         # 20% for trajectory analysis
+                    "stats_update_frequency": 5,            # Less frequent stats updates
+                    
+                    # Birth request filtering - quality over quantity
+                    "birth_request_filters": {
+                        "min_distance_from_existing": 4.0,   # Prevent clustering
+                        "urgency_threshold": 0.2,            # Only urgent requests
+                        "cluster_size_multiplier": 1.5,      # Prefer larger clusters
+                        "layer_depth_penalty": 0.1           # Reduce deep layer births
+                    },
+                    # Memory management
+                    "cleanup_frequency": 5,
+                    "cuda_cache_cleanup": True,
+                    "memory_monitoring_enabled": True,
+                    "oom_recovery_enabled": True,
+                    
+                    # Experimental features for O(n*k) optimization
+                    "enable_splat_specialization": True,    # Let splats specialize by role
+                    "cross_layer_splat_sharing": False,     # Keep layers independent for now
+                    "dynamic_splat_rebalancing": True,      # Move splats between regions
+                    "attention_matrix_chunking": True,      # Process attention in chunks
                 }
             }
         }
