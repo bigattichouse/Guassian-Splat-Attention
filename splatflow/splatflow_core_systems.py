@@ -100,7 +100,7 @@ class DatasetManager:
         
         # Available datasets for comprehensive training
         self.available_datasets = {
-            'wikitext': 'wikitext-2-raw-v1',
+            'wikitext': 'openwebtext',
             'openwebtext': 'openwebtext',
             'bookcorpus': 'bookcorpus',
             'c4': 'c4',

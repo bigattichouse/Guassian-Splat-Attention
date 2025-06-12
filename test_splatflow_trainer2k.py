@@ -253,15 +253,15 @@ class EnhancedPhase2Config:
                 "config": {
                     **create_onk_enhanced_config(),
                     "model_dim": 512,
-                    "num_layers": 6,
-                    "num_splats": 20,
-                    "max_splats": 48,
-                    "batch_size": 2,
+                    "num_layers": 3,
+                    "num_splats": 48,
+                    "max_splats": 256,
+                    "batch_size": 1,
                     "gradient_accumulation_steps": 4,
                     "target_sequences": 3000,
                     "steps_per_epoch": 80,
-                    "seq_length": 4096,
-                    "max_seq_len": 4096,
+                    "seq_length": 2048,
+                    "max_seq_len": 2048,
                     "epochs": 75,
                     
                     # Full Phase 2 feature set
